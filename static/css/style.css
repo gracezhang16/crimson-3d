@@ -27,3 +27,8 @@
 .narrow-form {
     max-width: 24rem;
 }
+
+/* Keep the room facts card a readable width on wide screens. */
+.narrow-card {
+    max-width: 36rem;
+}

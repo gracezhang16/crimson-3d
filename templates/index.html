@@ -8,20 +8,47 @@
         Pick a dorm to open its rooms in 3D, at true size, and try out your furniture.
     </p>
 
-    {% if dorms %}
-        <ul class="list-group">
-            {% for dorm in dorms %}
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    <span>
-                        {{ dorm.name }}
-                        {% if dorm.yard %}<span class="text-body-secondary small">· {{ dorm.yard }}</span>{% endif %}
-                    </span>
-                    <span class="badge text-bg-secondary rounded-pill">
-                        {{ dorm.type_count }} room type{{ "s" if dorm.type_count != 1 }}
-                    </span>
-                </li>
-            {% endfor %}
-        </ul>
+    {# A plain GET form: submitting it reloads this page with ?q=... in the URL,
+       so search works without JavaScript and results can be bookmarked. #}
+    <form action="{{ url_for('pages.index') }}" method="get" role="search" class="mb-4">
+        <label for="q" class="form-label">Search dorms and room types</label>
+        <div class="input-group">
+            <input id="q" name="q" type="search" class="form-control" value="{{ query }}"
+                   placeholder="e.g. Canaday, double" autocomplete="off">
+            <button type="submit" class="btn btn-crimson">Search</button>
+        </div>
+    </form>
+
+    {% if query %}
+        <div class="d-flex justify-content-between align-items-baseline mb-3">
+            <h2 class="h5 mb-0">Results for “{{ query }}”</h2>
+            <a href="{{ url_for('pages.index') }}" class="small">Clear search</a>
+        </div>
+
+        {% if not dorms and not room_types %}
+            <p>Nothing matches “{{ query }}”. Try part of a dorm name, or a word like “single”.</p>
+        {% endif %}
+
+        {% if dorms %}
+            <h3 class="h6 text-body-secondary text-uppercase">Dorms</h3>
+            {% include "_dorm_list.html" %}
+        {% endif %}
+
+        {% if room_types %}
+            <h3 class="h6 text-body-secondary text-uppercase">Room types</h3>
+            <div class="list-group mb-4">
+                {% for type in room_types %}
+                    <a class="list-group-item list-group-item-action"
+                       href="{{ url_for('pages.room_type', type_id=type.id) }}">
+                        {{ type.name }}
+                        <span class="text-body-secondary small">· {{ type.dorm_name }}</span>
+                        {% if type.status == "draft" %}<span class="badge text-bg-warning ms-1">Draft</span>{% endif %}
+                    </a>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% elif dorms %}
+        {% include "_dorm_list.html" %}
     {% else %}
         <p>No dorms yet. Run <code>python init_db.py</code> to load the sample rooms.</p>
     {% endif %}

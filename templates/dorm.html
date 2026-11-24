@@ -1,0 +1,49 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ dorm.name }}{% endblock %}
+
+{% block main %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('pages.index') }}">Dorms</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ dorm.name }}</li>
+        </ol>
+    </nav>
+
+    <h1 class="h3 mb-1">{{ dorm.name }}</h1>
+    {% if dorm.yard %}<p class="text-body-secondary mb-2">{{ dorm.yard }}</p>{% endif %}
+    {% if dorm.description %}<p>{{ dorm.description }}</p>{% endif %}
+
+    {% if room_types %}
+        <div class="row row-cols-1 row-cols-md-2 g-3 mt-2">
+            {% for type in room_types %}
+                <div class="col">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h2 class="h5 card-title">
+                                {{ type.name }}
+                                {% if type.status == "draft" %}<span class="badge text-bg-warning align-middle">Draft</span>{% endif %}
+                            </h2>
+                            <ul class="list-unstyled mb-0 small">
+                                <li>
+                                    {{ type.facts.width | feet_inches }} × {{ type.facts.length | feet_inches }}
+                                    {% if not type.facts.is_rectangle %}(overall){% endif %}
+                                    · {{ "%.1f" | format(type.facts.area_sq_ft) }} sq ft
+                                </li>
+                                <li>{{ type.capacity }} student{{ "s" if type.capacity != 1 }}</li>
+                                <li>{{ type.bathroom_label }}</li>
+                            </ul>
+                        </div>
+                        <div class="card-footer bg-transparent border-0 pt-0 pb-3">
+                            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('pages.room_type', type_id=type.id) }}">Details</a>
+                            {# /plan/<id> is served once the planner route exists (Claire, P1). #}
+                            <a class="btn btn-crimson btn-sm" href="/plan/{{ type.id }}">Open in 3D</a>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p class="mt-3">No rooms from {{ dorm.name }} have been published yet.</p>
+    {% endif %}
+{% endblock %}

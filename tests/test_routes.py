@@ -1,9 +1,12 @@
-"""Route tests (Grace): home page, register, login, logout. Later milestones
-add ownership, draft visibility and the layout save round trip (SPEC.md 11)."""
+"""Route tests (Grace): register, login, logout, home and search, dorm and
+room type pages with draft visibility. Later milestones add ownership and the
+layout save round trip (SPEC.md 11)."""
 
+import pytest
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from helpers import db
+from pages import feet_inches, like_pattern
 
 PASSWORD = "correct-horse"
 
@@ -22,6 +25,17 @@ def add_user(email="student@example.com", password=PASSWORD):
     return db.execute(
         "INSERT INTO users (email, hash) VALUES (?, ?)", email, generate_password_hash(password)
     )
+
+
+def log_in(client, user_id):
+    """Pretend to log in by writing user_id straight into the session."""
+    with client.session_transaction() as session:
+        session["user_id"] = user_id
+
+
+def type_id(name):
+    """Return the id of the seeded room type with this name."""
+    return db.execute("SELECT id FROM room_types WHERE name = ?", name)[0]["id"]
 
 
 def logged_in_id(client):
@@ -148,3 +162,133 @@ def test_logout_clears_session(client):
     assert response.status_code == 302
     assert logged_in_id(client) is None
     assert "Log in" in client.get("/").get_data(as_text=True)
+
+
+# --- Browsing: home, search, dorm, room type --------------------------------
+
+@pytest.fixture
+def drafts():
+    """Add a draft room type to Demo Hall, and a dorm whose only type is a draft.
+
+    Both reuse the sample single's geometry. Returns their ids.
+    """
+    single = db.execute("SELECT dorm_id, geometry FROM room_types WHERE name = 'Single (sample)'")[0]
+    draft_id = db.execute(
+        "INSERT INTO room_types (dorm_id, name, geometry, status) VALUES (?, 'Secret triple', ?, 'draft')",
+        single["dorm_id"], single["geometry"],
+    )
+    hidden_dorm_id = db.execute("INSERT INTO dorms (name) VALUES ('Hidden House')")
+    db.execute(
+        "INSERT INTO room_types (dorm_id, name, geometry, status) VALUES (?, 'Quad', ?, 'draft')",
+        hidden_dorm_id, single["geometry"],
+    )
+    return {"type": draft_id, "dorm_id": single["dorm_id"], "hidden_dorm": hidden_dorm_id}
+
+
+def as_admin(client):
+    """Log the client in as a newly created admin."""
+    admin_id = db.execute("INSERT INTO users (email, hash, role) VALUES ('a@example.com', 'x', 'admin')")
+    log_in(client, admin_id)
+
+
+def test_feet_inches_filter():
+    assert feet_inches(114) == "9′ 6″"
+    assert feet_inches(144) == "12′ 0″"
+    assert feet_inches(11) == "0′ 11″"
+    assert feet_inches(100.6) == "8′ 5″"  # diagonal walls round to the nearest inch
+
+
+def test_like_pattern_escapes_wildcards():
+    assert like_pattern("double") == "%double%"
+    assert like_pattern("100%_") == "%100\\%\\_%"
+
+
+def test_home_links_to_dorm_page(client):
+    page = client.get("/").get_data(as_text=True)
+    dorm_id = db.execute("SELECT id FROM dorms WHERE name = 'Demo Hall'")[0]["id"]
+    assert f'href="/dorms/{dorm_id}"' in page
+
+
+def test_search_finds_room_type(client):
+    page = client.get("/?q=DOUBLE").get_data(as_text=True)
+    assert "Double (sample)" in page
+    assert "Single (sample)" not in page
+
+
+def test_search_finds_dorm(client):
+    page = client.get("/?q=demo").get_data(as_text=True)
+    assert "Demo Hall" in page
+
+
+def test_search_with_no_matches(client):
+    response = client.get("/?q=zzzz")
+    assert response.status_code == 200
+    assert "Nothing matches" in response.get_data(as_text=True)
+
+
+def test_search_percent_sign_is_literal(client):
+    # Unescaped, "%" would match every name.
+    assert "Nothing matches" in client.get("/?q=%25").get_data(as_text=True)
+
+
+def test_dorm_page_lists_room_types(client):
+    dorm_id = db.execute("SELECT id FROM dorms WHERE name = 'Demo Hall'")[0]["id"]
+    response = client.get(f"/dorms/{dorm_id}")
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    assert "Single (sample)" in page
+    assert "Double (sample)" in page
+    assert "9′ 6″ × 12′ 6″" in page
+    assert f'href="/plan/{type_id("Single (sample)")}"' in page
+
+
+def test_missing_dorm_is_404(client):
+    assert client.get("/dorms/9999").status_code == 404
+
+
+def test_room_type_facts(client):
+    response = client.get(f"/types/{type_id('Single (sample)')}")
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    assert "9′ 6″ × 12′ 6″" in page
+    assert "(114 × 150 in)" in page
+    assert "118.8 sq ft" in page          # 114 × 150 / 144 = 118.75
+    assert "8′ 6″" in page                # ceiling 102 in
+    assert "Shared hallway bathroom" in page
+    assert "Built-in closet" in page
+    assert "Measured by Sample data, not a real room." in page   # no date recorded
+    assert "measure big purchases against your own room" in page
+
+
+def test_room_without_closet_mentions_wardrobe(client):
+    page = client.get(f"/types/{type_id('Double (sample)')}").get_data(as_text=True)
+    assert "Harvard provides a wardrobe" in page
+    assert "192.0 sq ft" in page          # 144 × 192 / 144
+
+
+def test_missing_room_type_is_404(client):
+    assert client.get("/types/9999").status_code == 404
+
+
+def test_drafts_hidden_from_visitors(client, drafts):
+    assert client.get(f"/types/{drafts['type']}").status_code == 404
+    assert "Secret triple" not in client.get(f"/dorms/{drafts['dorm_id']}").get_data(as_text=True)
+    assert "Secret triple" not in client.get("/?q=secret").get_data(as_text=True)
+    assert "Hidden House" not in client.get("/").get_data(as_text=True)
+
+
+def test_drafts_hidden_from_students(client, drafts):
+    log_in(client, add_user())
+    assert client.get(f"/types/{drafts['type']}").status_code == 404
+    assert "Secret triple" not in client.get(f"/dorms/{drafts['dorm_id']}").get_data(as_text=True)
+
+
+def test_drafts_visible_to_admins(client, drafts):
+    as_admin(client)
+    response = client.get(f"/types/{drafts['type']}")
+    assert response.status_code == 200
+    assert "This room type is a draft" in response.get_data(as_text=True)
+    dorm_page = client.get(f"/dorms/{drafts['dorm_id']}").get_data(as_text=True)
+    assert "Secret triple" in dorm_page and "Draft" in dorm_page
+    assert "Secret triple" in client.get("/?q=secret").get_data(as_text=True)
+    assert "Hidden House" in client.get("/").get_data(as_text=True)
