@@ -162,3 +162,51 @@ export function createSaveControls(config, layout, name) {
   setDirty(false);
   refreshList();
 }
+
+/**
+ * Wire up the "Default layout" panel section (admin-default mode, A6): Save
+ * writes the room type's default layout, the one visitors see first.
+ *
+ * @param {{typeId: number}} config
+ * @param {ReturnType<import("./layout.js").createLayout>} layout
+ */
+export function createDefaultSaveControls(config, layout) {
+  const button = document.querySelector("#save-default-button");
+  const status = document.querySelector("#save-status");
+  const error = document.querySelector("#save-error");
+  let dirty = false;
+
+  function setDirty(value) {
+    dirty = value;
+    status.className = dirty ? "small text-warning-emphasis" : "small text-body-secondary";
+    status.textContent = dirty ? "Unsaved changes" : "";
+  }
+  layout.onChange(({ content }) => {
+    if (content) setDirty(true);
+  });
+  window.addEventListener("beforeunload", (event) => {
+    if (dirty) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+  });
+
+  button.addEventListener("click", async () => {
+    error.hidden = true;
+    button.disabled = true;
+    try {
+      await apiFetch(`/admin/api/types/${config.typeId}/default-layout`, {
+        method: "PUT", body: { placements: layout.placements().map(placementForSaving) },
+      });
+      setDirty(false);
+      status.className = "small text-success";
+      status.textContent = "Saved. Visitors see this now.";
+    } catch (problem) {
+      error.textContent = problem.message;
+      error.hidden = false;
+    } finally {
+      button.disabled = false;
+    }
+  });
+  setDirty(false);
+}

@@ -1,6 +1,6 @@
 """Shared helpers for every blueprint: the database handle, the error page,
-the login and admin guards, current_user(), and the new-account checks shared
-by /register and create_admin.py (SPEC.md 7.4).
+the login and admin guards, current_user(), the new-account checks shared
+by /register and create_admin.py (SPEC.md 7.4), and saving placements.
 """
 
 import os
@@ -8,6 +8,8 @@ from functools import wraps
 
 from cs50 import SQL
 from flask import jsonify, redirect, render_template, session
+
+from geometry import validate_placements
 
 # Tests point CRIMSON3D_DB at a temporary file so they never touch the real
 # database (SPEC.md section 6).
@@ -143,3 +145,56 @@ def admin_required(f):
             return apology("Only admins can open this page.", 403)
         return f(*args, **kwargs)
     return decorated_function
+
+
+# ---------------------------------------------------------------------------
+# Saving placements, shared by the layouts API (api.py) and the admin's
+# default-layout endpoint (admin.py, A6).
+# ---------------------------------------------------------------------------
+
+def placements_error(placements, geometry):
+    """Return one message describing what is wrong with the placements, or None."""
+    furniture_ids = {row["id"] for row in db.execute("SELECT id FROM furniture")}
+    errors = validate_placements(placements, geometry, furniture_ids)
+    if not errors:
+        return None
+    if len(errors) == 1:
+        return errors[0]
+    return f"{errors[0]} (and {len(errors) - 1} more problem{'s' if len(errors) > 2 else ''})"
+
+
+def insert_placements(layout_id, placements):
+    """Insert already-validated placements for a layout.
+
+    x and y are rounded to whole inches (SPEC.md 4.4). Only custom items
+    (furniture_id null) store a label and size; catalog items get theirs from
+    the furniture table, so any extra fields sent with them are ignored.
+    """
+    for placement in placements:
+        custom = placement["furniture_id"] is None
+        db.execute(
+            "INSERT INTO placements (layout_id, furniture_id, label, width, depth, height, x, y, rotation) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            layout_id, placement["furniture_id"],
+            placement["label"].strip() if custom else None,
+            placement["width"] if custom else None,
+            placement["depth"] if custom else None,
+            placement["height"] if custom else None,
+            round(placement["x"]), round(placement["y"]), placement["rotation"],
+        )
+
+
+def run_in_transaction(work):
+    """Run work() inside BEGIN ... COMMIT, rolling back if anything fails.
+
+    A transaction makes several statements succeed or fail together, so a
+    layout is never left with half its placements saved (SPEC.md 5).
+    """
+    db.execute("BEGIN TRANSACTION")
+    try:
+        result = work()
+    except Exception:
+        db.execute("ROLLBACK")
+        raise
+    db.execute("COMMIT")
+    return result

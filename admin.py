@@ -9,10 +9,11 @@ logged-in admin gets a 403 page. tests/test_admin.py checks this for every
 import json
 from datetime import date
 
-from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, flash, jsonify, redirect, render_template, request, session, url_for
 
 from geometry import validate_room
-from helpers import admin_required, apology, db, normalize_email
+from helpers import (admin_required, apology, db, insert_placements, json_error, normalize_email,
+                     placements_error, run_in_transaction)
 
 admin = Blueprint("admin", __name__)
 
@@ -305,6 +306,73 @@ def dorm_problem(form):
     if len(form["description"]) > MAX_DESCRIPTION:
         return f"The description can be at most {MAX_DESCRIPTION} characters."
     return None
+
+
+# ---------------------------------------------------------------------------
+# Default layout (SPEC.md 7.3, 9.3): what visitors see first in a room
+# ---------------------------------------------------------------------------
+
+@admin.route("/types/<int:type_id>/default-layout")
+@admin_required
+def default_layout(type_id):
+    """The planner in admin-default mode: Save writes the room's default layout.
+
+    Works for drafts too, so a room can be furnished before it's published.
+    The planner loads the current default from /api/types/<id> as usual.
+    """
+    rows = db.execute(
+        "SELECT room_types.id, room_types.name, room_types.status, "
+        "dorms.id AS dorm_id, dorms.name AS dorm_name "
+        "FROM room_types JOIN dorms ON dorms.id = room_types.dorm_id WHERE room_types.id = ?",
+        type_id,
+    )
+    if not rows:
+        return apology("We couldn't find that room type.", 404)
+    return render_template("plan.html", room_type=rows[0], layout_id="", mode="admin-default")
+
+
+@admin.route("/api/types/<int:type_id>/default-layout", methods=["PUT"])
+@admin_required
+def save_default_layout(type_id):
+    """Replace a room type's default layout: {placements} -> {ok, updated}.
+
+    The default layout is the layouts row with no owner and is_default = 1
+    (SPEC.md 5). It is created if the room has none, so there is always at
+    most one per room type. Placements are checked with
+    geometry.validate_placements, as for students' layouts.
+    """
+    room_type = find_room_type(type_id)
+    if room_type is None:
+        return json_error("We couldn't find that room type.", 404)
+    body = request.get_json(silent=True) if request.is_json else None
+    if not isinstance(body, dict) or "placements" not in body:
+        return json_error("Send {\"placements\": [...]} as JSON.", 400)
+    placements = body["placements"]
+    error = placements_error(placements, json.loads(room_type["geometry"]))
+    if error:
+        return json_error(error, 400)
+
+    def save():
+        rows = db.execute(
+            "SELECT id FROM layouts WHERE room_type_id = ? AND user_id IS NULL AND is_default = 1",
+            type_id,
+        )
+        if rows:
+            layout_id = rows[0]["id"]
+            db.execute("UPDATE layouts SET updated = CURRENT_TIMESTAMP WHERE id = ?", layout_id)
+            db.execute("DELETE FROM placements WHERE layout_id = ?", layout_id)
+        else:
+            layout_id = db.execute(
+                "INSERT INTO layouts (user_id, room_type_id, name, is_default) "
+                "VALUES (NULL, ?, 'Default layout', 1)",
+                type_id,
+            )
+        insert_placements(layout_id, placements)
+        return layout_id
+
+    layout_id = run_in_transaction(save)
+    updated = db.execute("SELECT updated FROM layouts WHERE id = ?", layout_id)[0]["updated"]
+    return jsonify({"ok": True, "updated": updated})
 
 
 # ---------------------------------------------------------------------------

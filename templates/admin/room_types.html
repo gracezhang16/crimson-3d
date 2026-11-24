@@ -48,6 +48,7 @@
                             <td class="text-end text-nowrap">
                                 <a class="btn btn-sm btn-crimson" href="{{ url_for('admin.edit_room_type', type_id=type.id) }}">Edit</a>
                                 <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('pages.plan', type_id=type.id) }}">3D</a>
+                                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.default_layout', type_id=type.id) }}">Default layout</a>
                                 {# A button that changes data must POST, so each is a tiny form. #}
                                 <form class="d-inline" method="post"
                                       action="{{ url_for('admin.unpublish_room_type' if type.status == 'published' else 'admin.publish_room_type', type_id=type.id) }}">

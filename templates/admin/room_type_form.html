@@ -183,6 +183,7 @@
                         {# Admins can open drafts in the planner (SPEC.md 9.1). #}
                         <a class="btn btn-outline-secondary" href="{{ url_for('pages.plan', type_id=room_type.id) }}"
                            target="_blank" rel="noopener">Preview in 3D</a>
+                        <a class="btn btn-outline-secondary" href="{{ url_for('admin.default_layout', type_id=room_type.id) }}">Default layout</a>
                     {% endif %}
                 </div>
                 {# Shown by main.js if Save is pressed while the preview lists problems. #}

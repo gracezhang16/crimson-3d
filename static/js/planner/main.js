@@ -14,7 +14,7 @@ import { createWallLabels } from "./labels.js";
 import { createLayout } from "./layout.js";
 import { createPanel } from "./panel.js";
 import { buildRoom } from "./room.js";
-import { createSaveControls } from "./saving.js";
+import { createDefaultSaveControls, createSaveControls } from "./saving.js";
 import { createScene, webglAvailable } from "./scene.js";
 
 const NO_WEBGL_MESSAGE =
@@ -89,6 +89,8 @@ async function start(canvas, config) {
   }
   if (config.mode === "edit" && config.loggedIn) {
     createSaveControls(config, layout, saved ? saved.name : "My layout");
+  } else if (config.mode === "admin-default") {
+    createDefaultSaveControls(config, layout);
   }
 
   const labels = createWallLabels(container, room.walls);

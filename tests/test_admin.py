@@ -426,3 +426,69 @@ def test_unassign_someone_not_in_the_room(client):
 
 def test_assign_to_missing_room_is_404(client):
     assert admin_client(client).post("/admin/rooms/999/assign", data={"email": "x@example.com"}).status_code == 404
+
+
+# --- A6: default layout --------------------------------------------------------
+
+def default_placements(type_id):
+    return db.execute(
+        "SELECT furniture_id, x, y, rotation FROM placements JOIN layouts ON layouts.id = placements.layout_id "
+        "WHERE layouts.room_type_id = ? AND layouts.user_id IS NULL ORDER BY placements.id",
+        type_id,
+    )
+
+
+def test_default_layout_page_is_the_planner_in_admin_mode(client):
+    single = type_id_named("Single (sample)")
+    response = admin_client(client).get(f"/admin/types/{single}/default-layout")
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    assert 'data-mode="admin-default"' in page
+    assert 'id="save-default-button"' in page
+    assert 'id="save-button"' not in page                    # no student save controls
+
+
+def test_default_layout_page_missing_type_is_404(client):
+    assert admin_client(client).get("/admin/types/999/default-layout").status_code == 404
+
+
+def test_save_default_layout_is_what_visitors_see(client):
+    single = type_id_named("Single (sample)")
+    new = [{"furniture_id": 1, "x": 30, "y": 50, "rotation": 90}, {"furniture_id": 2, "x": 90, "y": 120, "rotation": 0}]
+    response = admin_client(client).put(f"/admin/api/types/{single}/default-layout", json={"placements": new})
+    assert response.status_code == 200
+    assert response.get_json()["ok"] is True
+    client.get("/logout")
+    assert client.get(f"/api/types/{single}").get_json()["default_layout"]["placements"] == new
+
+
+def test_default_layout_is_created_if_missing_and_stays_unique(client):
+    single = type_id_named("Single (sample)")
+    db.execute("DELETE FROM layouts WHERE room_type_id = ? AND user_id IS NULL", single)
+    admin_client(client)
+    for x in (30, 40):
+        client.put(f"/admin/api/types/{single}/default-layout",
+                   json={"placements": [{"furniture_id": 1, "x": x, "y": 50, "rotation": 0}]})
+    rows = db.execute("SELECT id FROM layouts WHERE room_type_id = ? AND user_id IS NULL AND is_default = 1", single)
+    assert len(rows) == 1
+    assert [p["x"] for p in default_placements(single)] == [40]
+
+
+def test_save_default_layout_validates(client):
+    single = type_id_named("Single (sample)")
+    before = default_placements(single)
+    admin_client(client)
+    bad = client.put(f"/admin/api/types/{single}/default-layout",
+                     json={"placements": [{"furniture_id": 1, "x": 30, "y": 50, "rotation": 45}]})
+    assert bad.status_code == 400
+    assert "0, 90, 180 or 270" in bad.get_json()["error"]
+    assert client.put(f"/admin/api/types/{single}/default-layout", json={"nope": []}).status_code == 400
+    assert client.put(f"/admin/api/types/{single}/default-layout", data="x").status_code == 400
+    assert client.put("/admin/api/types/999/default-layout", json={"placements": []}).status_code == 404
+    assert default_placements(single) == before
+
+
+def test_edit_page_links_to_default_layout(client):
+    single = type_id_named("Single (sample)")
+    page = admin_client(client).get(f"/admin/types/{single}/edit").get_data(as_text=True)
+    assert f'href="/admin/types/{single}/default-layout"' in page

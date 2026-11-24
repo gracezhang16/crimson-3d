@@ -267,3 +267,11 @@ Technical choices:
 - **The layout controls sit near the top of the panel**, not after the catalogue as SPEC.md 8.6 lists them, because the panel now scrolls and Save would otherwise be out of sight.
 - **Placements are sent in the SPEC.md 4.4 shape** (`placementForSaving`): catalog items send id, centre and rotation; custom items also send label and size; positions are whole inches.
 - **Tested end to end in headless Chrome with real input**: register, drag the bed, Save (URL changes, database has the new position), reload (bed comes back), rename, Save as new, then a change plus navigation triggers the browser's leave warning.
+
+## 2026-11-24 (A6, built for Hannah with the team's agreement)
+
+- **The default-layout page reuses the planner** (`plan.html` with `data-mode="admin-default"`). The panel shows "Save default layout" and "Visitors see this arrangement first" instead of the student's name box and saved-layout list. It works for drafts, so a room can be furnished before it's published.
+- **`PUT /admin/api/types/<id>/default-layout` validates with `geometry.validate_placements`** (as noted when S5 added it) and replaces the placements in a transaction. If the room has no default layout yet, one is created; the code looks up the existing `user_id IS NULL AND is_default = 1` row first, so there is never more than one per room type (SPEC.md 5; tested by saving twice).
+- **`insert_placements`, `run_in_transaction` and `placements_error` moved from `api.py` to `helpers.py`**, since both the layouts API and the admin endpoint use them. `api.py` behaves exactly as before; all its tests still pass, including the rollback test.
+- **The endpoint uses `@admin_required` like every admin route** (SPEC.md 7.3), so a student's request gets the HTML 403 page rather than JSON. The planner's `apiFetch` still shows a readable message ("Something went wrong (error 403)"), and only admins reach this page anyway.
+- **Tested end to end in headless Chrome**: an admin drags the bed on the default-layout page and saves; logged out, `/api/types/<id>` and the planner show the new position.

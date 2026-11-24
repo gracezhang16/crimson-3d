@@ -9,8 +9,8 @@ import json
 
 from flask import Blueprint, jsonify, request, session
 
-from geometry import validate_placements
-from helpers import VISIBLE_TYPE, api_login_required, db, json_error, viewer_is_admin
+from helpers import (VISIBLE_TYPE, api_login_required, db, insert_placements, json_error,
+                     placements_error, run_in_transaction, viewer_is_admin)
 
 api = Blueprint("api", __name__)
 
@@ -138,54 +138,6 @@ def clean_layout_name(name):
     if not isinstance(name, str) or not 1 <= len(name.strip()) <= MAX_LAYOUT_NAME:
         return None, f"Give the layout a name of 1 to {MAX_LAYOUT_NAME} characters."
     return name.strip(), None
-
-
-def placements_error(placements, geometry):
-    """Return one message describing what is wrong with the placements, or None."""
-    furniture_ids = {row["id"] for row in db.execute("SELECT id FROM furniture")}
-    errors = validate_placements(placements, geometry, furniture_ids)
-    if not errors:
-        return None
-    if len(errors) == 1:
-        return errors[0]
-    return f"{errors[0]} (and {len(errors) - 1} more problem{'s' if len(errors) > 2 else ''})"
-
-
-def insert_placements(layout_id, placements):
-    """Insert already-validated placements for a layout.
-
-    x and y are rounded to whole inches (SPEC.md 4.4). Only custom items
-    (furniture_id null) store a label and size; catalog items get theirs from
-    the furniture table, so any extra fields sent with them are ignored.
-    """
-    for placement in placements:
-        custom = placement["furniture_id"] is None
-        db.execute(
-            "INSERT INTO placements (layout_id, furniture_id, label, width, depth, height, x, y, rotation) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            layout_id, placement["furniture_id"],
-            placement["label"].strip() if custom else None,
-            placement["width"] if custom else None,
-            placement["depth"] if custom else None,
-            placement["height"] if custom else None,
-            round(placement["x"]), round(placement["y"]), placement["rotation"],
-        )
-
-
-def run_in_transaction(work):
-    """Run work() inside BEGIN ... COMMIT, rolling back if anything fails.
-
-    A transaction makes several statements succeed or fail together, so a
-    layout is never left with half its placements saved (SPEC.md 5).
-    """
-    db.execute("BEGIN TRANSACTION")
-    try:
-        result = work()
-    except Exception:
-        db.execute("ROLLBACK")
-        raise
-    db.execute("COMMIT")
-    return result
 
 
 def owned_layout(layout_id):
