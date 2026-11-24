@@ -6,7 +6,8 @@ from flask import Blueprint, flash, redirect, render_template, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from geometry import signed_area
-from helpers import apology, check_new_account, current_user, db, normalize_email
+from helpers import (VISIBLE_TYPE, apology, check_new_account, db, normalize_email,
+                     viewer_is_admin)
 
 pages = Blueprint("pages", __name__)
 
@@ -16,11 +17,6 @@ BATHROOM_LABELS = {
     "hallway": "Shared hallway bathroom",
     "shared-suite": "Shared with the suite",
 }
-
-# SQL condition for "this room type may be shown to the viewer". The ? is 1
-# for admins (who also see drafts) and 0 for everyone else (SPEC.md 7.1).
-VISIBLE_TYPE = "(room_types.status = 'published' OR ?)"
-
 
 # ---------------------------------------------------------------------------
 # Helpers for these pages
@@ -36,12 +32,6 @@ def feet_inches(inches):
     """
     feet, rest = divmod(round(inches), 12)
     return f"{feet}′ {rest}″"
-
-
-def viewer_is_admin():
-    """Return True if the logged-in user is an admin."""
-    user = current_user()
-    return user is not None and user["role"] == "admin"
 
 
 def room_facts(geometry):

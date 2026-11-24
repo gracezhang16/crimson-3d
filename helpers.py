@@ -7,7 +7,7 @@ import os
 from functools import wraps
 
 from cs50 import SQL
-from flask import redirect, render_template, session
+from flask import jsonify, redirect, render_template, session
 
 # Tests point CRIMSON3D_DB at a temporary file so they never touch the real
 # database (SPEC.md section 6).
@@ -53,6 +53,16 @@ def apology(message, code=400):
     return render_template("apology.html", message=message, code=code), code
 
 
+def json_error(message, code=400):
+    """Return a JSON error, {"error": message}, with an HTTP status code.
+
+    The JSON twin of apology(), for /api and /admin/api (SPEC.md 7.2). Use
+    400 for bad input, 401 for not logged in, 403 for not yours, 404 for
+    not found.
+    """
+    return jsonify({"error": message}), code
+
+
 def current_user():
     """Return the logged-in user's row as a dict, or None if nobody is logged in.
 
@@ -67,6 +77,19 @@ def current_user():
         "SELECT id, email, role, created FROM users WHERE id = ?", user_id
     )
     return rows[0] if rows else None
+
+
+def viewer_is_admin():
+    """Return True if the logged-in user is an admin."""
+    user = current_user()
+    return user is not None and user["role"] == "admin"
+
+
+# SQL condition for "this room type may be shown to the viewer", used by every
+# query that lists or opens room types for pages and the API. The ? is 1 for
+# admins (who also see drafts) and 0 for everyone else (SPEC.md 7.1). Pass
+# int(viewer_is_admin()) for it.
+VISIBLE_TYPE = "(room_types.status = 'published' OR ?)"
 
 
 def login_required(f):

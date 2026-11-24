@@ -9,12 +9,12 @@ app here. We use three so each teammate edits a different file:
 
 import os
 
-from flask import Flask
+from flask import Flask, request
 from flask_session import Session
 
 from admin import admin
 from api import api
-from helpers import current_user
+from helpers import current_user, json_error
 from pages import pages
 
 app = Flask(__name__)
@@ -42,3 +42,24 @@ def inject_user():
     show Log in / Register or the user's email and Log out.
     """
     return {"user": current_user()}
+
+
+# Error handlers run when Flask can't serve a request normally. Requests that
+# match no route never reach a blueprint, so these must live on the app. Under
+# /api we answer in JSON, because the planner's fetch() calls expect JSON
+# (SPEC.md 7.2); everywhere else we return Flask's usual error page unchanged.
+
+@app.errorhandler(404)
+def not_found(error):
+    """Answer an unknown /api address with JSON; leave other 404s as they are."""
+    if request.path.startswith("/api/"):
+        return json_error("There is no such API address.", 404)
+    return error
+
+
+@app.errorhandler(405)
+def method_not_allowed(error):
+    """Answer a wrong HTTP method under /api with JSON (e.g. DELETE /api/furniture)."""
+    if request.path.startswith("/api/"):
+        return json_error(f"{request.method} is not allowed here.", 405)
+    return error

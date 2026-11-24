@@ -60,3 +60,13 @@ Technical choices:
 - **One SQL condition decides what a viewer may see**: `VISIBLE_TYPE = "(room_types.status = 'published' OR ?)"`, with `?` = 1 for admins. Every browsing query uses it, so the draft rule lives in one place.
 - **`feet_inches` is a Jinja filter registered from the pages blueprint** (`app_template_filter`), so `app.py` didn't change. Other teammates' templates can use it too.
 - **"Open in 3D" is a plain `/plan/<id>` link**, not `url_for`, because that route arrives with the planner (P1). Switch it to `url_for` then.
+
+## 2026-11-24 (S4)
+
+- **Unknown `/api/...` addresses and wrong methods return JSON** (`{"error"}` with 404 or 405) through two error handlers in `app.py`. SPEC.md 7.2 says all API responses are JSON, and a request that matches no route never reaches the api blueprint, so the handler has to be on the app. Every other 404/405 keeps Flask's normal error page.
+- **`json_error(message, code)` lives in `helpers.py`** next to `apology()`, so Hannah's `/admin/api/...` endpoints can return the same error shape.
+- **`viewer_is_admin()` and the `VISIBLE_TYPE` SQL condition moved from `pages.py` to `helpers.py`**, because the API needs the same draft rule. The draft rule now lives in one place for pages and API. `VISIBLE_TYPE` is a fixed string pasted into queries with an f-string; every value still goes through a `?` placeholder.
+- **Placement `x`/`y` come back as `94`, not `94.0`** (`whole_if_possible`). They're stored as REAL because they may be fractional while dragging, but they're whole inches once saved (SPEC.md 4.4).
+- **Custom placements include `label`, `width`, `depth`, `height`; catalog placements don't** (`placement_to_json`), matching the two examples in SPEC.md 4.4. S5's layout endpoints reuse the same function.
+- **A room type with no default layout returns `"placements": []`** rather than an error, so the planner can open a freshly built room before an admin has furnished it.
+- **`/api/furniture` lists Harvard items first, then purchases, each in catalog order** (`ORDER BY category = 'purchase', id`), matching the side panel's sections (SPEC.md 8.6).
