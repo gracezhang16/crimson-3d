@@ -61,7 +61,7 @@ def test_admin_home_shows_counts(client):
     assert response.status_code == 200
     page = response.get_data(as_text=True)
     assert "Published suite types" in page
-    assert '<div class="fs-3 fw-semibold">2</div>' in page   # the two Demo Hall rooms
+    assert '<div class="fs-3 fw-semibold">3</div>' in page   # the three Demo Hall suite types
     assert 'href="/admin/types"' in page
 
 
@@ -117,7 +117,7 @@ def test_dorms_page_lists_dorms_with_counts(client):
     log_in(client, "admin")
     page = client.get("/admin/dorms").get_data(as_text=True)
     assert "Demo Hall" in page
-    assert '<td class="text-end">2</td>' in page
+    assert '<td class="text-end">3</td>' in page
 
 
 def test_add_dorm(client):
@@ -162,10 +162,18 @@ def test_bad_dorm_keeps_what_was_typed(client):
 import json  # noqa: E402  (grouped with the A4 tests that use it)
 
 L_ROOM = {
-    "version": 1, "units": "in", "ceiling": 96,
-    "outline": [[0, 0], [120, 0], [120, 60], [60, 60], [60, 150], [0, 150]],
-    "features": [{"kind": "door", "wall": 3, "offset": 20, "width": 30, "height": 80}],
+    "version": 2, "units": "in", "ceiling": 96,
+    "rooms": [{
+        "name": "Main room", "kind": "bedroom",
+        "outline": [[0, 0], [120, 0], [120, 60], [60, 60], [60, 150], [0, 150]],
+        "features": [{"kind": "door", "wall": 3, "offset": 20, "width": 30, "height": 80}],
+    }],
 }
+
+
+def with_room_changes(**changes):
+    """L_ROOM with its one room changed (e.g. features=[...])."""
+    return {**L_ROOM, "rooms": [{**L_ROOM["rooms"][0], **changes}]}
 
 
 def demo_hall_id():
@@ -211,14 +219,14 @@ def test_saved_draft_opens_in_the_planner_for_admins_only(client):
 
 
 def test_server_rejects_window_wider_than_wall_with_readable_message(client):
-    room = dict(L_ROOM, features=[{"kind": "window", "wall": 1, "offset": 0, "width": 80, "height": 50, "sill": 30}])
+    room = with_room_changes(features=[{"kind": "window", "wall": 1, "offset": 0, "width": 80, "height": 50, "sill": 30}])
     response = admin_client(client).post("/admin/types/new", data=builder_form(geometry=json.dumps(room)))
     assert response.status_code == 400
     page = response.get_data(as_text=True)
     assert "Window 1 is wider than wall B (80 in on a 60 in wall)." in page
     assert 'value="L-shaped single"' in page               # what was typed is kept
     assert "data-geometry=" in page and "&#34;window&#34;" in page   # and so is the shape
-    assert db.execute("SELECT COUNT(*) AS n FROM suite_types")[0]["n"] == 2
+    assert db.execute("SELECT COUNT(*) AS n FROM suite_types")[0]["n"] == 3   # nothing new was saved
 
 
 @pytest.mark.parametrize("changes, message", [

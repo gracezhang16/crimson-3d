@@ -1,5 +1,9 @@
 /**
- * Room-format wall helpers (the contract, SPEC.md section 4).
+ * Wall helpers for the suite format (the contract, SPEC.md section 4).
+ *
+ * A suite (format version 2) is a list of rooms in one shared plan; every
+ * helper here works on ONE room's outline, so callers loop over
+ * geometry.rooms.
  *
  * THIS FILE IS SHARED. geometry.py holds the same helpers in Python; any
  * change here needs the matching change there. Validation lives only in

@@ -34,36 +34,65 @@ def feet_inches(inches):
     return f"{feet}′ {rest}″"
 
 
-def room_facts(geometry):
-    """Work out the numbers a student cares about from a room's geometry.
+def room_facts(room):
+    """Work out the numbers a student cares about for one room of a suite.
 
-    Returns a dict with the overall width (east-west) and length
-    (north-south) in inches, whether the room is a plain rectangle, the floor
-    area in square feet, the ceiling height, whether there is a built-in
-    closet, and how many windows there are.
+    Returns a dict with the room's name and kind, its overall width
+    (east-west) and length (north-south) in inches, whether it is a plain
+    rectangle, its floor area in square feet, whether it has a built-in
+    closet, and how many windows it has.
     """
-    outline = geometry["outline"]
+    outline = room["outline"]
     xs = [x for x, _ in outline]
     ys = [y for _, y in outline]
     width, length = max(xs) - min(xs), max(ys) - min(ys)
     area = abs(signed_area(outline))  # square inches
-    kinds = [feature["kind"] for feature in geometry["features"]]
+    kinds = [feature["kind"] for feature in room["features"]]
     return {
+        "name": room["name"],
+        "kind": room["kind"],
         "width": width,
         "length": length,
         # A 4-corner outline that fills its bounding box is a rectangle. For
         # any other shape, width × length is only the overall size.
         "is_rectangle": len(outline) == 4 and area == width * length,
         "area_sq_ft": area / 144,
-        "ceiling": geometry["ceiling"],
         "has_closet": "closet" in kinds,
         "windows": kinds.count("window"),
     }
 
 
+def suite_facts(geometry):
+    """The facts for a whole suite: each room's facts plus totals.
+
+    `summary` is a short description for cards: the size of a one-room
+    suite, or "2 bedrooms + common room" for a bigger one.
+    """
+    rooms = [room_facts(room) for room in geometry["rooms"]]
+    bedrooms = sum(1 for room in rooms if room["kind"] == "bedroom")
+    commons = len(rooms) - bedrooms
+    if len(rooms) == 1:
+        only = rooms[0]
+        summary = f"{feet_inches(only['width'])} × {feet_inches(only['length'])}"
+        if not only["is_rectangle"]:
+            summary += " (overall)"
+    else:
+        parts = [f"{bedrooms} bedroom{'s' if bedrooms != 1 else ''}"] if bedrooms else []
+        if commons:
+            parts.append("common room" if commons == 1 else f"{commons} common rooms")
+        summary = " + ".join(parts)
+    return {
+        "rooms": rooms,
+        "summary": summary,
+        "area_sq_ft": sum(room["area_sq_ft"] for room in rooms),
+        "ceiling": geometry["ceiling"],
+        "windows": sum(room["windows"] for room in rooms),
+    }
+
+
 def with_facts(suite_type):
     """Add `facts` and `bathroom_label` to a suite_types row (a dict) and return it."""
-    suite_type["facts"] = room_facts(json.loads(suite_type["geometry"]))
+    suite_type["facts"] = suite_facts(json.loads(suite_type["geometry"]))
     suite_type["bathroom_label"] = BATHROOM_LABELS.get(suite_type["bathroom"], "Not recorded")
     return suite_type
 

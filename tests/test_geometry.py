@@ -17,6 +17,7 @@ from geometry import (
     signed_area,
     validate_placements,
     validate_room,
+    validate_suite,
     wall_length,
     wall_letter,
     walls,
@@ -28,15 +29,16 @@ RECT = [[0, 0], [114, 0], [114, 150], [0, 150]]
 # An L-shape: a 120-wide top bar and a 60-wide leg going down on the left.
 L_SHAPE = [[0, 0], [120, 0], [120, 60], [60, 60], [60, 150], [0, 150]]
 
-SEED_ROOMS = sorted((Path(__file__).parent.parent / "seed" / "rooms").glob("*.json"))
+SEED_SUITES = sorted((Path(__file__).parent.parent / "seed" / "suites").glob("*.json"))
 
 
 def make_room(**changes):
-    """Return a valid room (the SPEC.md 4.2 example) with some fields replaced."""
+    """Return a valid one-room suite (the SPEC.md 4.2 example) with some fields
+    replaced. outline, features, name and kind go to the room; anything else
+    (version, units, ceiling, rooms) to the suite."""
     room = {
-        "version": 1,
-        "units": "in",
-        "ceiling": 102,
+        "name": "Room",
+        "kind": "bedroom",
         "outline": copy.deepcopy(RECT),
         "features": [
             {"kind": "door", "wall": 3, "offset": 8, "width": 34, "height": 80},
@@ -46,8 +48,10 @@ def make_room(**changes):
             {"kind": "outlet", "wall": 2, "offset": 20},
         ],
     }
-    room.update(changes)
-    return room
+    suite = {"version": 2, "units": "in", "ceiling": 102, "rooms": [room]}
+    for key, value in changes.items():
+        (room if key in ("outline", "features", "name", "kind") else suite)[key] = value
+    return suite
 
 
 def room_with_feature(feature):
@@ -134,27 +138,27 @@ def test_feature_span():
 # ---------------------------------------------------------------------------
 
 def test_spec_example_is_valid():
-    assert validate_room(make_room()) == []
+    assert validate_suite(make_room()) == []
 
 
 def test_l_shape_and_triangle_are_valid():
-    assert validate_room(make_room(outline=L_SHAPE, features=[])) == []
-    assert validate_room(make_room(outline=[[0, 0], [100, 0], [0, 100]], features=[])) == []
+    assert validate_suite(make_room(outline=L_SHAPE, features=[])) == []
+    assert validate_suite(make_room(outline=[[0, 0], [100, 0], [0, 100]], features=[])) == []
 
 
-@pytest.mark.parametrize("path", SEED_ROOMS, ids=lambda p: p.name)
-def test_seed_rooms_are_valid(path):
-    assert validate_room(json.loads(path.read_text())["geometry"]) == []
+@pytest.mark.parametrize("path", SEED_SUITES, ids=lambda p: p.name)
+def test_seed_suites_are_valid(path):
+    assert validate_suite(json.loads(path.read_text())["geometry"]) == []
 
 
 def test_feature_exactly_filling_a_wall_is_valid():
     feature = {"kind": "closet", "wall": 0, "offset": 0, "width": 114, "height": 84}
-    assert validate_room(room_with_feature(feature)) == []
+    assert validate_suite(room_with_feature(feature)) == []
 
 
 def test_radiator_without_height_or_depth_is_valid():
     feature = {"kind": "radiator", "wall": 0, "offset": 0, "width": 30}
-    assert validate_room(room_with_feature(feature)) == []
+    assert validate_suite(room_with_feature(feature)) == []
 
 
 # ---------------------------------------------------------------------------
@@ -163,17 +167,17 @@ def test_radiator_without_height_or_depth_is_valid():
 
 def assert_one_error(room, fragment):
     """Assert validation fails with exactly one error containing `fragment`."""
-    errors = validate_room(room)
+    errors = validate_suite(room)
     assert len(errors) == 1, errors
     assert fragment in errors[0], errors
 
 
-def test_room_must_be_an_object():
-    assert validate_room([1, 2, 3]) == ["The room must be a JSON object."]
+def test_suite_must_be_an_object():
+    assert validate_suite([1, 2, 3]) == ["The suite must be a JSON object."]
 
 
-@pytest.mark.parametrize("version", [2, "1", True, None])
-def test_version_must_be_1(version):
+@pytest.mark.parametrize("version", [1, "2", True, None])
+def test_version_must_be_2(version):
     assert_one_error(make_room(version=version), "Version")
 
 
@@ -195,7 +199,7 @@ def test_corner_count(outline):
     assert_one_error(make_room(outline=outline, features=[]), "3 to 12 corners")
 
 
-@pytest.mark.parametrize("corner", [[601, 0], [-1, 0], [1.5, 0], [0], "00"])
+@pytest.mark.parametrize("corner", [[1201, 0], [-1, 0], [1.5, 0], [0], "00"])
 def test_corner_values(corner):
     outline = [corner, [114, 0], [114, 150], [0, 150]]
     assert_one_error(make_room(outline=outline, features=[]), "Corner 1")
@@ -221,7 +225,7 @@ def test_edges_must_not_cross():
 def test_edges_must_not_touch():
     # Two squares meeting at one corner, [50, 50], traced as one outline.
     figure_eight = [[0, 0], [50, 0], [50, 50], [100, 50], [100, 100], [50, 100], [50, 50], [0, 50]]
-    errors = validate_room(make_room(outline=figure_eight, features=[]))
+    errors = validate_suite(make_room(outline=figure_eight, features=[]))
     assert errors and "cross" in errors[0]
 
 
@@ -236,7 +240,7 @@ def test_features_must_be_a_list():
 
 def test_at_most_40_features():
     outlet = {"kind": "outlet", "wall": 0, "offset": 1}
-    assert validate_room(make_room(features=[outlet] * 40)) == []
+    assert validate_suite(make_room(features=[outlet] * 40)) == []
     assert_one_error(make_room(features=[outlet] * 41), "at most 40")
 
 
@@ -265,8 +269,8 @@ def test_width_required_except_outlet():
 
 def test_feature_wider_than_wall():
     window = {"kind": "window", "wall": 0, "offset": 0, "width": 120, "height": 54, "sill": 30}
-    errors = validate_room(room_with_feature(window))
-    assert errors == ["Window 1 is wider than wall A (120 in on a 114 in wall)."]
+    errors = validate_suite(room_with_feature(window))
+    assert errors == ["Room: Window 1 is wider than wall A (120 in on a 114 in wall)."]
 
 
 def test_feature_runs_past_end_of_wall():
@@ -307,10 +311,85 @@ def test_radiator_depth_must_be_positive():
 
 
 # ---------------------------------------------------------------------------
+# validate_suite: rooms (format version 2)
+# ---------------------------------------------------------------------------
+
+BEDROOM = {"name": "Bedroom A", "kind": "bedroom", "outline": [[0, 0], [120, 0], [120, 144], [0, 144]], "features": []}
+
+
+def suite_of(*rooms):
+    return {"version": 2, "units": "in", "ceiling": 102, "rooms": list(rooms)}
+
+
+def room_at(name, x, y, width, length, kind="common"):
+    """A rectangular room whose north-west corner is at (x, y)."""
+    return {"name": name, "kind": kind, "features": [],
+            "outline": [[x, y], [x + width, y], [x + width, y + length], [x, y + length]]}
+
+
+def test_a_suite_with_a_gap_between_rooms_is_valid():
+    assert validate_suite(suite_of(BEDROOM, room_at("Common room", 125, 0, 180, 293))) == []
+
+
+def test_rooms_may_share_a_wall():
+    assert validate_suite(suite_of(BEDROOM, room_at("Common room", 120, 0, 180, 144))) == []
+
+
+def test_rooms_may_touch_at_a_corner():
+    assert validate_suite(suite_of(BEDROOM, room_at("Closet room", 120, 144, 40, 40))) == []
+
+
+def test_overlapping_rooms_are_rejected():
+    errors = validate_suite(suite_of(BEDROOM, room_at("Common room", 100, 20, 180, 144)))
+    assert errors == ["Bedroom A and Common room overlap. Rooms may share a wall but not floor space."]
+
+
+def test_a_room_inside_another_is_rejected():
+    errors = validate_suite(suite_of(BEDROOM, room_at("Nook", 20, 20, 30, 30)))
+    assert len(errors) == 1 and "overlap" in errors[0]
+
+
+def test_a_suite_needs_1_to_8_rooms():
+    assert validate_suite(suite_of()) == ["A suite needs 1 to 8 rooms."]
+    many = [room_at(f"Room {i}", i * 50, 0, 40, 40) for i in range(9)]
+    assert validate_suite(suite_of(*many)) == ["A suite needs 1 to 8 rooms."]
+    assert validate_suite({**suite_of(BEDROOM), "rooms": "Bedroom"}) == ["A suite needs 1 to 8 rooms."]
+
+
+@pytest.mark.parametrize("name", ["", "   ", "x" * 41, None])
+def test_room_names(name):
+    errors = validate_suite(suite_of({**BEDROOM, "name": name}))
+    assert errors == ["Room 1: Give the room a name of 1 to 40 characters."]
+
+
+def test_room_kind():
+    assert validate_suite(suite_of({**BEDROOM, "kind": "kitchen"})) == ["Bedroom A: Room kind must be bedroom or common."]
+
+
+def test_messages_name_the_room():
+    window = {"kind": "window", "wall": 1, "offset": 0, "width": 300, "height": 50, "sill": 30}
+    common = room_at("Common room", 125, 0, 180, 293)
+    errors = validate_suite(suite_of(BEDROOM, {**common, "features": [window]}))
+    assert errors == ["Common room: Window 1 is wider than wall B (300 in on a 293 in wall)."]
+
+
+def test_suites_can_be_up_to_1200_inches():
+    assert validate_suite(suite_of(room_at("Big", 0, 0, 1200, 1200))) == []
+
+
+def test_placements_may_be_anywhere_in_the_suite():
+    suite = suite_of(BEDROOM, room_at("Common room", 125, 0, 180, 293))
+    bed_in_common_room = {"furniture_id": 1, "x": 250, "y": 250, "rotation": 0}
+    assert validate_placements([bed_in_common_room], suite, {1}) == []
+    assert "outside the room" in validate_placements([{**bed_in_common_room, "x": 400}], suite, {1})[0]
+
+
+# ---------------------------------------------------------------------------
 # validate_placements (SPEC.md 4.4, 7.2)
 # ---------------------------------------------------------------------------
 
-PLACEMENT_ROOM = {"version": 1, "units": "in", "ceiling": 102, "outline": RECT, "features": []}
+PLACEMENT_ROOM = {"version": 2, "units": "in", "ceiling": 102,
+                  "rooms": [{"name": "Room", "kind": "bedroom", "outline": RECT, "features": []}]}
 CATALOG_IDS = {1, 2, 3}
 BED = {"furniture_id": 1, "x": 20, "y": 42, "rotation": 0}
 BEAN_BAG = {"furniture_id": None, "label": "Bean bag chair", "width": 36, "depth": 36,
@@ -417,7 +496,5 @@ def test_shared_feature_cases(case):
     features = case["features"]
     if features == "41 outlets":
         features = [{"kind": "outlet", "wall": 0, "offset": 1}] * 41
-    room = make_room(features=features)
-    if "outline" in case:
-        room["outline"] = case["outline"]
-    assert validate_room(room) == case["expected"]
+    room = {"name": "Room", "kind": "bedroom", "outline": case.get("outline", RECT), "features": features}
+    assert validate_room(room, 102) == case["expected"]

@@ -26,8 +26,7 @@
                             </h2>
                             <ul class="list-unstyled mb-0 small">
                                 <li>
-                                    {{ type.facts.width | feet_inches }} × {{ type.facts.length | feet_inches }}
-                                    {% if not type.facts.is_rectangle %}(overall){% endif %}
+                                    {{ type.facts.summary }}
                                     · {{ "%.1f" | format(type.facts.area_sq_ft) }} sq ft
                                 </li>
                                 <li>{{ type.capacity }} student{{ "s" if type.capacity != 1 }}</li>

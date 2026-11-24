@@ -99,15 +99,17 @@ Import map, placed in `layout.html` before any module script:
 
 ---
 
-## 4. The room format (the contract)
+## 4. The suite format (the contract)
 
 Everything depends on this format: the builder writes it, the server validates and stores it, the planner draws it. **Changing it requires all three teammates to agree.** The files that implement it, `geometry.py` and `static/js/shared/geometry.js`, are shared and must stay in step.
 
+> **Changed 2026-11-24 (version 2, agreed by all three):** the unit is now a **suite**: one or more rooms (bedrooms and an optional common room) laid out in one shared floor plan, so furniture can move between rooms. Each room's outline and features follow the same rules as the old single-room format. Sections 1, 5 and 7 are updated to match in milestone U4; see `docs/decisions.md`.
+
 ### 4.1 Coordinates
 
-- **Plan view, inches.** `x` increases to the right (east), `y` increases downward (south), the same as SVG. The origin is the room's first corner.
+- **Plan view, inches.** `x` increases to the right (east), `y` increases downward (south), the same as SVG. All rooms of a suite share one plan; coordinates run from 0 to 1200.
 - **3D mapping.** three.js `x` = plan `x`; three.js `z` = plan `y`; three.js `y` is up. 1 three.js unit = 1 inch. The floor is at `y = 0`.
-- **Outline.** `outline` lists the floor's corners in order, **clockwise as seen on screen in plan view**. A rectangle has 4 corners; an L-shaped room has 6.
+- **Outline.** Each room's `outline` lists its floor's corners in order, **clockwise as seen on screen in plan view**. A rectangle has 4 corners; an L-shaped room has 6. Rooms may share a wall or have a gap (the wall's thickness) between them, but may not overlap.
 - **Walls.** Wall `i` runs from `outline[i]` to `outline[(i + 1) % n]`. So in a rectangle drawn from the top-left corner, wall 0 is the top (north) wall, wall 1 the right, wall 2 the bottom, wall 3 the left.
 - **Interior side.** Compute each wall's inward normal from the polygon's signed area; never assume it from the order. Write this once in `geometry.js` / `geometry.py` and test it.
 - **Why clockwise.** With `y` pointing down and corners listed clockwise, a wall's start corner is always the one **on your left as you stand inside the room facing that wall**. So `offset` is exactly what a person with a tape measure records: "from the left corner to the edge of the window". Test this property for a rectangle and an L-shape.
@@ -116,16 +118,28 @@ Everything depends on this format: the builder writes it, the server validates a
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "units": "in",
   "ceiling": 102,
-  "outline": [[0, 0], [114, 0], [114, 150], [0, 150]],
-  "features": [
-    {"kind": "door",     "wall": 3, "offset": 8,  "width": 34, "height": 80},
-    {"kind": "window",   "wall": 0, "offset": 36, "width": 42, "height": 54, "sill": 30},
-    {"kind": "closet",   "wall": 1, "offset": 0,  "width": 60, "height": 84},
-    {"kind": "radiator", "wall": 0, "offset": 42, "width": 30, "height": 24, "depth": 6},
-    {"kind": "outlet",   "wall": 2, "offset": 20}
+  "rooms": [
+    {
+      "name": "Bedroom A",
+      "kind": "bedroom",
+      "outline": [[0, 0], [114, 0], [114, 150], [0, 150]],
+      "features": [
+        {"kind": "door",     "wall": 1, "offset": 100, "width": 34, "height": 80},
+        {"kind": "window",   "wall": 0, "offset": 36,  "width": 42, "height": 54, "sill": 30},
+        {"kind": "closet",   "wall": 3, "offset": 0,   "width": 60, "height": 84},
+        {"kind": "radiator", "wall": 0, "offset": 42,  "width": 30, "height": 24, "depth": 6},
+        {"kind": "outlet",   "wall": 2, "offset": 20}
+      ]
+    },
+    {
+      "name": "Common room",
+      "kind": "common",
+      "outline": [[119, 0], [299, 0], [299, 150], [119, 150]],
+      "features": []
+    }
   ]
 }
 ```
@@ -134,13 +148,16 @@ The numbers above are invented examples.
 
 | Field | Type | Rule |
 | --- | --- | --- |
-| `version` | int | Always `1` for now |
+| `version` | int | Always `2` (version 1 was a single room) |
 | `units` | string | Always `"in"` |
-| `ceiling` | int | 72 to 240 |
-| `outline` | array of `[x, y]` int pairs | 3 to 12 corners; each coordinate 0 to 600; non-zero area; no two consecutive corners equal; edges must not cross each other |
-| `features` | array | 0 to 40 items |
+| `ceiling` | int | 72 to 240, shared by every room |
+| `rooms` | array | 1 to 8 rooms; rooms must not overlap (they may share a wall) |
+| `room.name` | string | 1 to 40 characters, e.g. "Bedroom A" |
+| `room.kind` | string | `bedroom` or `common` |
+| `room.outline` | array of `[x, y]` int pairs | 3 to 12 corners; each coordinate 0 to 1200; non-zero area; no two consecutive corners equal; edges must not cross each other |
+| `room.features` | array | 0 to 40 items per room |
 | `feature.kind` | string | One of `door`, `window`, `closet`, `radiator`, `outlet` |
-| `feature.wall` | int | 0 to `n - 1` |
+| `feature.wall` | int | 0 to `n - 1`, a wall of its own room |
 | `feature.offset` | int | Distance along the wall from its **start corner** to the feature's **nearer edge**; `offset >= 0` |
 | `feature.width` | int | Required except for `outlet`; `offset + width <= wall length` |
 | `feature.height` | int | Required for `door`, `window`, `closet`; for `window`, `sill + height <= ceiling`; otherwise `height <= ceiling` |

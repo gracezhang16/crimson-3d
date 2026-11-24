@@ -23,7 +23,7 @@
         <aside class="planner-panel">
             <section>
                 <h1 class="h5 mb-0">{{ suite_type.name }}</h1>
-                <a class="small" href="{{ url_for('pages.suite_type', type_id=suite_type.id) }}">{{ suite_type.dorm_name }} · room facts</a>
+                <a class="small" href="{{ url_for('pages.suite_type', type_id=suite_type.id) }}">{{ suite_type.dorm_name }} · suite facts</a>
                 {% if suite_type.status == "draft" %}
                     <span class="badge text-bg-warning align-self-start">Draft</span>
                 {% endif %}
@@ -85,7 +85,7 @@
                 <div class="catalog-grid" id="catalog-purchase"></div>
             </section>
             <section>
-                <h2 class="planner-heading">In this room <span id="room-item-count"></span></h2>
+                <h2 class="planner-heading">In this suite <span id="room-item-count"></span></h2>
                 {# A button per item, so items can be selected with the keyboard too. #}
                 <ul class="list-unstyled mb-0 room-items" id="room-items"></ul>
             </section>

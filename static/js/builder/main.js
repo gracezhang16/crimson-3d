@@ -201,10 +201,11 @@ function showStatus(geometry, errors) {
     status.append(list);
     return;
   }
-  const xs = geometry.outline.map(([x]) => x);
-  const ys = geometry.outline.map(([, y]) => y);
+  const { outline } = geometry.rooms[0];
+  const xs = outline.map(([x]) => x);
+  const ys = outline.map(([, y]) => y);
   status.className = "mt-2 small text-success";
-  status.textContent = `✓ ${formatFeetInches(Math.max(...xs))} × ${formatFeetInches(Math.max(...ys))} overall · ${geometry.outline.length} walls`;
+  status.textContent = `✓ ${formatFeetInches(Math.max(...xs))} × ${formatFeetInches(Math.max(...ys))} overall · ${outline.length} walls`;
 }
 
 /** Rebuild the geometry from the form and redraw everything. */
@@ -218,7 +219,8 @@ function update() {
   refreshFeatures(wallCount, featureErrors);
   status.className = "mt-2 small";
   showStatus(geometry, errors);
-  drawPreview(svg, geometry, openEnd, featureErrors);
+  // The preview draws one room (its outline and features). U3 draws whole suites.
+  drawPreview(svg, geometry && geometry.rooms[0], openEnd, featureErrors);
   // Only a complete, valid room goes into the hidden field the server reads (A4).
   field("geometry").value = errors.length ? "" : JSON.stringify(geometry);
 }
@@ -314,8 +316,8 @@ if (form.dataset.geometry && !loadGeometry(JSON.parse(form.dataset.geometry))) {
   // The form would fall back to a default rectangle, and saving that would
   // overwrite the real shape. So saving is switched off for this room.
   form.querySelector('button[type="submit"]').disabled = true;
-  saveBlocked.textContent = "This room has angled walls, which the builder can't edit yet, "
-    + "so saving is turned off to keep its shape safe.";
+  saveBlocked.textContent = "This suite has angled walls or several rooms, which the builder "
+    + "can't edit yet, so saving is turned off to keep its shape safe.";
   saveBlocked.hidden = false;
 }
 setShape(field("shape").value);

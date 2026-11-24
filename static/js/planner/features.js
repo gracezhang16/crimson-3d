@@ -30,15 +30,15 @@ const COLORS = {
 };
 
 /**
- * Build every feature of a room.
+ * Build every feature of one room of a suite.
  *
- * @param {{outline: number[][], features: object[]}} geometry
+ * @param {{outline: number[][], features: object[]}} room
  * @returns {{onWall: THREE.Group[], onFloor: THREE.Group}}
  *   onWall[i] holds the panels mounted on wall i (hidden with the wall when
  *   it drops to a stub); onFloor holds radiators and door zones, which stay.
  */
-export function buildFeatures(geometry) {
-  const { outline, features } = geometry;
+export function buildFeatures(room) {
+  const { outline, features } = room;
   const onWall = outline.map(() => new THREE.Group());
   const onFloor = new THREE.Group();
 
@@ -47,7 +47,8 @@ export function buildFeatures(geometry) {
     placeOnWall(object, outline, feature);
     (feature.kind === "radiator" ? onFloor : onWall[feature.wall]).add(object);
   }
-  for (const zone of zones(geometry).filter((z) => z.kind === "door")) {
+  // zones() takes a whole suite, so wrap this room as a one-room suite.
+  for (const zone of zones({ rooms: [room] }).filter((z) => z.kind === "door")) {
     onFloor.add(makeZoneTint(zone.corners));
   }
   return { onWall, onFloor };

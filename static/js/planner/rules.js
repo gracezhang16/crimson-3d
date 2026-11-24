@@ -8,6 +8,9 @@
  * clearance and each item's issue (SPEC.md 4.5 rules 3, 4, 6 and 8).
  *
  * Coordinates are plan inches, [x, y] with y pointing south (SPEC.md 4.1).
+ * A suite (format version 2) has several rooms in one shared plan; an item
+ * is fine anywhere inside any one room. Functions that take `outlines` want
+ * every room's outline (geometry.rooms.map((room) => room.outline)).
  */
 
 import { featureSpan, inwardNormal, walls } from "../shared/geometry.js";
@@ -49,12 +52,19 @@ function zoneDepth(feature) {
  * Each zone has its four corners (in order, so it can be drawn) and its
  * axis-aligned bounding box, which the P7 overlap rules use.
  *
- * @param {{outline: number[][], features: object[]}} geometry
+ * @param {{rooms: {outline: number[][], features: object[]}[]}} geometry - a suite
  * @returns {{kind: string, issue: string, corners: number[][],
  *   box: {minX: number, minY: number, maxX: number, maxY: number}}[]}
  */
 export function zones(geometry) {
-  const { outline, features } = geometry;
+  return geometry.rooms.flatMap((room) => roomZones(room));
+}
+
+/**
+ * The zones of one room's features.
+ * @param {{outline: number[][], features: object[]}} room
+ */
+function roomZones({ outline, features }) {
   return features
     .filter((feature) => zoneDepth(feature) > 0)
     .map((feature) => {
@@ -254,27 +264,49 @@ export function insideRoom(box, outline) {
 }
 
 /**
- * The room's bounding box.
- * @param {number[][]} outline
+ * The bounding box around one or more outlines (a room, or a whole suite).
+ * @param {number[][][]} outlines
  * @returns {{minX: number, minY: number, maxX: number, maxY: number}}
  */
-function outlineBox(outline) {
-  const xs = outline.map(([x]) => x);
-  const ys = outline.map(([, y]) => y);
+function outlinesBox(outlines) {
+  const corners = outlines.flat();
+  const xs = corners.map(([x]) => x);
+  const ys = corners.map(([, y]) => y);
   return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) };
+}
+
+/**
+ * Is a footprint inside one of the suite's rooms?
+ * @param {{minX: number, minY: number, maxX: number, maxY: number}} box
+ * @param {number[][][]} outlines
+ * @returns {boolean}
+ */
+export function insideAnyRoom(box, outlines) {
+  return outlines.some((outline) => insideRoom(box, outline));
 }
 
 /**
  * How far to move a footprint along one axis to sit flush against the
  * nearest parallel wall within SNAP_DISTANCE, or 0.
  *
- * @param {number[][]} outline
+ * @param {number[][][]} outlines - every room's outline
  * @param {{minX: number, minY: number, maxX: number, maxY: number}} box
  * @param {"x" | "y"} axis - "x": look at walls running north-south
  * @returns {number}
  */
-function flushShift(outline, box, axis) {
+function flushShift(outlines, box, axis) {
   let best = 0;
+  for (const outline of outlines) {
+    best = flushShiftForRoom(outline, box, axis, best);
+  }
+  return best;
+}
+
+/**
+ * flushShift() for one room's walls, keeping `best` if it's already closer.
+ * @returns {number}
+ */
+function flushShiftForRoom(outline, box, axis, best) {
   walls(outline).forEach(({ start, end }, i) => {
     const [nx, ny] = inwardNormal(outline, i);
     const normal = axis === "x" ? nx : ny;
@@ -314,21 +346,21 @@ function flushShift(outline, box, axis) {
  * @param {{x: number, y: number}} position - the wanted centre
  * @param {{width: number, depth: number}} size
  * @param {number} rotation
- * @param {number[][]} outline
+ * @param {number[][][]} outlines - every room's outline
  * @param {{flush?: boolean}} [options]
  * @returns {{x: number, y: number}}
  */
-export function snap(position, size, rotation, outline, { flush = true } = {}) {
+export function snap(position, size, rotation, outlines, { flush = true } = {}) {
   const { halfX, halfY } = footprint(size, rotation);
   let x = Math.round(position.x);
   let y = Math.round(position.y);
   const box = () => ({ minX: x - halfX, minY: y - halfY, maxX: x + halfX, maxY: y + halfY });
   if (flush) {
-    x += flushShift(outline, box(), "x");
-    y += flushShift(outline, box(), "y");
+    x += flushShift(outlines, box(), "x");
+    y += flushShift(outlines, box(), "y");
   }
 
-  const room = outlineBox(outline);
+  const room = outlinesBox(outlines); // the whole suite's box
   x = halfX * 2 > room.maxX - room.minX ? (room.minX + room.maxX) / 2
     : Math.min(Math.max(x, room.minX + halfX), room.maxX - halfX);
   y = halfY * 2 > room.maxY - room.minY ? (room.minY + room.maxY) / 2
@@ -345,18 +377,18 @@ export function snap(position, size, rotation, outline, { flush = true } = {}) {
  *
  * @param {{width: number, depth: number, height: number}} size
  * @param {number} rotation
- * @param {number[][]} outline
+ * @param {number[][][]} outlines - every room's outline
  * @param {{box: object, height: number}[]} others - items already placed
  * @returns {{x: number, y: number}}
  */
-export function findFreeSpot(size, rotation, outline, others) {
+export function findFreeSpot(size, rotation, outlines, others) {
   const { halfX, halfY } = footprint(size, rotation);
-  const room = outlineBox(outline);
+  const room = outlinesBox(outlines);
   const blockers = size.height <= 1 ? [] : others.filter((other) => other.height > 1);
   for (let y = room.minY + halfY; y <= room.maxY - halfY; y += FREE_SPOT_GRID) {
     for (let x = room.minX + halfX; x <= room.maxX - halfX; x += FREE_SPOT_GRID) {
       const box = { minX: x - halfX, minY: y - halfY, maxX: x + halfX, maxY: y + halfY };
-      if (insideRoom(box, outline) && !blockers.some((other) => overlaps(box, other.box))) {
+      if (insideAnyRoom(box, outlines) && !blockers.some((other) => overlaps(box, other.box))) {
         return { x, y };
       }
     }
@@ -370,18 +402,20 @@ export function findFreeSpot(size, rotation, outline, others) {
 const FLAT_HEIGHT = 1; // inches; items this low (rugs) never collide (rule 3)
 
 /**
- * Could the item fit inside the room's bounding box, turned either way?
+ * Could the item fit inside some room's bounding box, turned either way?
  * If not, no amount of moving or turning helps: "Too big for this room".
  *
  * @param {{width: number, depth: number}} size
- * @param {number[][]} outline
+ * @param {number[][][]} outlines
  * @returns {boolean}
  */
-function fitsInRoom(size, outline) {
-  const room = outlineBox(outline);
-  const across = room.maxX - room.minX;
-  const down = room.maxY - room.minY;
-  return (size.width <= across && size.depth <= down) || (size.depth <= across && size.width <= down);
+function fitsInSomeRoom(size, outlines) {
+  return outlines.some((outline) => {
+    const room = outlinesBox([outline]);
+    const across = room.maxX - room.minX;
+    const down = room.maxY - room.minY;
+    return (size.width <= across && size.depth <= down) || (size.depth <= across && size.width <= down);
+  });
 }
 
 /**
@@ -418,30 +452,30 @@ function lowerFirst(name) {
  * run north-south or east-west (all our rooms) and slightly generous for an
  * angled wall.
  *
- * @param {{outline: number[][], features: object[]}} geometry
+ * @param {{rooms: {outline: number[][], features: object[]}[]}} geometry - a suite
  * @param {{placement: object, item: {name: string, width: number, depth: number,
  *   height: number, clearance: number}}[]} entries - from layout.js
  * @returns {(string | null)[]} entries[i]'s issue
  */
 export function evaluate(geometry, entries) {
-  const { outline } = geometry;
-  const roomZones = zones(geometry);
+  const outlines = geometry.rooms.map((room) => room.outline);
+  const allZones = zones(geometry);
   const boxes = entries.map((entry) => footprintBox(entry.placement, entry.item));
 
   return entries.map((entry, i) => {
     const { item } = entry;
     const box = boxes[i];
-    if (!fitsInRoom(item, outline)) {
+    if (!fitsInSomeRoom(item, outlines)) {
       return "Too big for this room";
     }
-    if (!insideRoom(box, outline)) {
+    if (!insideAnyRoom(box, outlines)) {
       return "Outside the room";
     }
     if (item.height <= FLAT_HEIGHT) {
       return null; // rule 3: nothing else applies to a rug
     }
     for (const kind of ["door", "closet", "radiator"]) {
-      const zone = roomZones.find((z) => z.kind === kind && overlaps(box, z.box));
+      const zone = allZones.find((z) => z.kind === kind && overlaps(box, z.box));
       if (zone) {
         return zone.issue;
       }

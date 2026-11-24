@@ -19,21 +19,51 @@
         </div>
     {% endif %}
 
-    <div class="card narrow-card">
+    <div class="card facts-card">
         <div class="card-body">
             <h1 class="h3 card-title mb-1">{{ suite_type.name }}</h1>
             <p class="text-body-secondary">{{ suite_type.dorm_name }}</p>
 
             {# A description list: each <dt> is a label, each <dd> its value. #}
-            <dl class="row mb-0">
-                <dt class="col-5">Size</dt>
-                <dd class="col-7">
-                    {{ facts.width | feet_inches }} × {{ facts.length | feet_inches }}
-                    <span class="text-body-secondary">({{ facts.width }} × {{ facts.length }} in{% if not facts.is_rectangle %}, overall{% endif %})</span>
-                </dd>
+            {# One row per room (bedrooms and common room), then the whole suite. #}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-3">
+                    <thead>
+                        <tr>
+                            <th scope="col">Room</th>
+                            <th scope="col">Size</th>
+                            <th scope="col" class="text-end">Area</th>
+                            <th scope="col">Storage</th>
+                            <th scope="col" class="text-end">Windows</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for room in facts.rooms %}
+                            <tr>
+                                <td>
+                                    {{ room.name }}
+                                    {% if room.kind == "common" %}<span class="badge text-bg-light border">common</span>{% endif %}
+                                </td>
+                                <td>
+                                    {{ room.width | feet_inches }} × {{ room.length | feet_inches }}
+                                    <span class="text-body-secondary small">({{ room.width }} × {{ room.length }} in{% if not room.is_rectangle %}, overall{% endif %})</span>
+                                </td>
+                                <td class="text-end">{{ "%.1f" | format(room.area_sq_ft) }} sq ft</td>
+                                <td>
+                                    {% if room.has_closet %}Built-in closet
+                                    {% elif room.kind == "bedroom" %}No closet; Harvard provides a wardrobe
+                                    {% else %}None{% endif %}
+                                </td>
+                                <td class="text-end">{{ room.windows }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
 
+            <dl class="row mb-0">
                 <dt class="col-5">Floor area</dt>
-                <dd class="col-7">{{ "%.1f" | format(facts.area_sq_ft) }} sq ft</dd>
+                <dd class="col-7">{{ "%.1f" | format(facts.area_sq_ft) }} sq ft{% if facts.rooms | length > 1 %} in all{% endif %}</dd>
 
                 <dt class="col-5">Ceiling</dt>
                 <dd class="col-7">{{ facts.ceiling | feet_inches }} <span class="text-body-secondary">({{ facts.ceiling }} in)</span></dd>
@@ -43,12 +73,6 @@
 
                 <dt class="col-5">Bathroom</dt>
                 <dd class="col-7">{{ suite_type.bathroom_label }}</dd>
-
-                <dt class="col-5">Storage</dt>
-                <dd class="col-7">{{ "Built-in closet" if facts.has_closet else "No closet; Harvard provides a wardrobe" }}</dd>
-
-                <dt class="col-5">Windows</dt>
-                <dd class="col-7">{{ facts.windows }}</dd>
             </dl>
 
             {% if suite_type.notes %}
@@ -62,7 +86,7 @@
 
     {# Accuracy note required on every facts page (SPEC.md 7.1). The date is
        left out when it wasn't recorded, as for the sample rooms. #}
-    <p class="small text-body-secondary mt-3 narrow-card">
+    <p class="small text-body-secondary mt-3 facts-card">
         {% if suite_type.measured_by %}
             Measured by {{ suite_type.measured_by }}{% if suite_type.measured_on %} on {{ suite_type.measured_on }}{% endif %}.
         {% endif %}

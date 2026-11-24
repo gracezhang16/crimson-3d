@@ -49,7 +49,7 @@ def test_home_page_lists_demo_hall(client):
     assert response.status_code == 200
     page = response.get_data(as_text=True)
     assert "Demo Hall" in page
-    assert "2 suite types" in page
+    assert "3 suite types" in page
     assert "not affiliated with Harvard University" in page
 
 

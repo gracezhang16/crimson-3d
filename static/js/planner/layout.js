@@ -22,13 +22,14 @@ const SELECTION_COLOR = 0xa51c30;  // crimson (SPEC.md 8.4)
 const SELECTION_MARGIN = 1.5;      // inches between the item and its outline
 
 /**
- * @param {{outline: number[][]}} geometry - the room
+ * @param {{rooms: {outline: number[][]}[]}} geometry - the suite
  * @param {Map<number, object>} catalogById - /api/furniture rows by id
  * @param {THREE.Scene} scene
  * @param {() => void} requestRender
  */
 export function createLayout(geometry, catalogById, scene, requestRender) {
-  const { outline } = geometry;
+  // Every room's outline: items may go anywhere inside any room.
+  const outlines = geometry.rooms.map((room) => room.outline);
   const furniture = new THREE.Group();
   scene.add(furniture);
   const outlineMesh = makeSelectionOutline();
@@ -122,7 +123,7 @@ export function createLayout(geometry, catalogById, scene, requestRender) {
      */
     addFromCatalog(catalogItem) {
       const item = itemDimensions({ furniture_id: catalogItem.id }, catalogById);
-      const spot = findFreeSpot(item, 0, outline, blockers());
+      const spot = findFreeSpot(item, 0, outlines, blockers());
       selected = addEntry({ furniture_id: catalogItem.id, x: spot.x, y: spot.y, rotation: 0 });
       changed(true);
     },
@@ -143,7 +144,7 @@ export function createLayout(geometry, catalogById, scene, requestRender) {
      * @param {{flush?: boolean}} [options] - false for arrow keys (see rules.snap)
      */
     moveTo(entry, x, y, options = {}) {
-      const spot = snap({ x, y }, entry.item, entry.placement.rotation, outline, options);
+      const spot = snap({ x, y }, entry.item, entry.placement.rotation, outlines, options);
       if (spot.x === entry.placement.x && spot.y === entry.placement.y) {
         return; // nothing moved; skip the redraw
       }
@@ -160,7 +161,7 @@ export function createLayout(geometry, catalogById, scene, requestRender) {
     rotate(entry) {
       const placement = entry.placement;
       placement.rotation = (placement.rotation + 90) % 360;
-      Object.assign(placement, snap(placement, entry.item, placement.rotation, outline, { flush: false }));
+      Object.assign(placement, snap(placement, entry.item, placement.rotation, outlines, { flush: false }));
       rebuild(entry);
       changed(true);
     },

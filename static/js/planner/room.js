@@ -1,6 +1,6 @@
 /**
- * Room geometry (SPEC.md 4) -> three.js objects: floor, walls, the
- * dollhouse stubs (SPEC.md 8.3) and the wall features (features.js).
+ * Suite geometry (SPEC.md 4) -> three.js objects: each room's floor, walls,
+ * the dollhouse stubs (SPEC.md 8.3) and the wall features (features.js).
  *
  * Plan [x, y] maps to three.js (x, 0, y): plan y (south) becomes three.js z,
  * and three.js y points up. 1 unit = 1 inch.
@@ -20,35 +20,32 @@ const WALL_COLOR = 0xf5f2ec;
 const WALL_EDGE_COLOR = 0x9aa1ad;
 
 /**
- * Build the room's three.js objects.
+ * Build a suite's three.js objects: every room's floor, walls and features.
+ * All rooms share one plan, so they appear side by side as they really are.
  *
- * @param {{ceiling: number, outline: number[][], features: object[]}} geometry - the room format
+ * @param {{ceiling: number, rooms: {outline: number[][], features: object[]}[]}} geometry
+ *   - the suite format (version 2)
  * @returns {{group: THREE.Group, bounds: THREE.Box3, walls: object[],
  *   update: (camera: THREE.Camera) => void}}
- *   `walls[i]` has `mesh`, `length`, `top` (the 3D point at the top centre of
- *   its inner face) and `isStub`. Call `update(camera)` before each frame.
+ *   `walls` lists every room's walls; each has `mesh`, `length`, `top` (the
+ *   3D point at the top centre of its inner face) and `isStub`. Call
+ *   `update(camera)` before each frame.
  */
 export function buildRoom(geometry) {
-  const { outline, ceiling } = geometry;
+  const { ceiling } = geometry;
   const group = new THREE.Group();
-  group.add(makeFloor(outline));
+  const rooms = geometry.rooms.map((room) => buildOneRoom(room, ceiling, group));
 
-  const wallParts = walls(outline).map((_, i) => makeWall(outline, i, ceiling));
-  wallParts.forEach((part) => group.add(part.mesh));
-
-  const features = buildFeatures(geometry);
-  features.onWall.forEach((wallFeatures) => group.add(wallFeatures));
-  group.add(features.onFloor);
-
-  const xs = outline.map(([x]) => x);
-  const ys = outline.map(([, y]) => y);
+  const corners = geometry.rooms.flatMap((room) => room.outline);
+  const xs = corners.map(([x]) => x);
+  const ys = corners.map(([, y]) => y);
   const bounds = new THREE.Box3(
     new THREE.Vector3(Math.min(...xs), 0, Math.min(...ys)),
     new THREE.Vector3(Math.max(...xs), ceiling, Math.max(...ys)),
   );
 
   /**
-   * Dollhouse view: drop every wall that stands between the camera and the
+   * Dollhouse view: drop every wall that stands between the camera and its
    * room to a stub, hiding the doors, windows and so on mounted on it; raise
    * the others to full height. Radiators and door zones are on the floor, so
    * they always show.
@@ -56,14 +53,35 @@ export function buildRoom(geometry) {
    */
   function update(camera) {
     const cameraPlan = [camera.position.x, camera.position.z];
-    wallParts.forEach((part, i) => {
-      part.isStub = cameraOutsideWall(outline, i, cameraPlan);
-      setWallHeight(part.mesh, part.isStub ? STUB_HEIGHT : ceiling);
-      features.onWall[i].visible = !part.isStub;
-    });
+    for (const { outline, wallParts, features } of rooms) {
+      wallParts.forEach((part, i) => {
+        part.isStub = cameraOutsideWall(outline, i, cameraPlan);
+        setWallHeight(part.mesh, part.isStub ? STUB_HEIGHT : ceiling);
+        features.onWall[i].visible = !part.isStub;
+      });
+    }
   }
 
-  return { group, bounds, walls: wallParts, update };
+  return { group, bounds, walls: rooms.flatMap((room) => room.wallParts), update };
+}
+
+/**
+ * Add one room's floor, walls and features to `group`.
+ *
+ * @param {{outline: number[][], features: object[]}} room
+ * @param {number} ceiling
+ * @param {THREE.Group} group
+ * @returns {{outline: number[][], wallParts: object[], features: object}}
+ */
+function buildOneRoom(room, ceiling, group) {
+  const { outline } = room;
+  group.add(makeFloor(outline));
+  const wallParts = walls(outline).map((_, i) => makeWall(outline, i, ceiling));
+  wallParts.forEach((part) => group.add(part.mesh));
+  const features = buildFeatures(room);
+  features.onWall.forEach((wallFeatures) => group.add(wallFeatures));
+  group.add(features.onFloor);
+  return { outline, wallParts, features };
 }
 
 /**

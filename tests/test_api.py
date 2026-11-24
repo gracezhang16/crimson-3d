@@ -10,7 +10,7 @@ import api
 from api import placement_to_json, whole_if_possible
 from helpers import db
 
-SEED_ROOMS = Path(__file__).resolve().parent.parent / "seed" / "rooms"
+SEED_ROOMS = Path(__file__).resolve().parent.parent / "seed" / "suites"
 
 
 def seed_room(filename):

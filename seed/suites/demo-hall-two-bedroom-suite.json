@@ -1,0 +1,267 @@
+{
+  "dorm": "Demo Hall",
+  "name": "Two-bedroom suite (sample)",
+  "capacity": 2,
+  "bathroom": "hallway",
+  "status": "published",
+  "measured_by": "Sample data, not a real suite",
+  "measured_on": null,
+  "notes": "Invented suite: two 10 × 12 ft bedrooms opening onto a 15 × 24 ft common room, with 5 in walls between rooms.",
+  "geometry": {
+    "version": 2,
+    "units": "in",
+    "ceiling": 102,
+    "rooms": [
+      {
+        "name": "Bedroom A",
+        "kind": "bedroom",
+        "outline": [
+          [
+            0,
+            0
+          ],
+          [
+            120,
+            0
+          ],
+          [
+            120,
+            144
+          ],
+          [
+            0,
+            144
+          ]
+        ],
+        "features": [
+          {
+            "kind": "window",
+            "wall": 0,
+            "offset": 40,
+            "width": 42,
+            "height": 54,
+            "sill": 30
+          },
+          {
+            "kind": "radiator",
+            "wall": 0,
+            "offset": 46,
+            "width": 30,
+            "height": 24,
+            "depth": 6
+          },
+          {
+            "kind": "door",
+            "wall": 1,
+            "offset": 100,
+            "width": 32,
+            "height": 80
+          },
+          {
+            "kind": "closet",
+            "wall": 3,
+            "offset": 4,
+            "width": 48,
+            "height": 84
+          },
+          {
+            "kind": "outlet",
+            "wall": 2,
+            "offset": 30
+          }
+        ]
+      },
+      {
+        "name": "Bedroom B",
+        "kind": "bedroom",
+        "outline": [
+          [
+            0,
+            149
+          ],
+          [
+            120,
+            149
+          ],
+          [
+            120,
+            293
+          ],
+          [
+            0,
+            293
+          ]
+        ],
+        "features": [
+          {
+            "kind": "window",
+            "wall": 2,
+            "offset": 40,
+            "width": 42,
+            "height": 54,
+            "sill": 30
+          },
+          {
+            "kind": "door",
+            "wall": 1,
+            "offset": 4,
+            "width": 32,
+            "height": 80
+          },
+          {
+            "kind": "closet",
+            "wall": 3,
+            "offset": 100,
+            "width": 40,
+            "height": 84
+          },
+          {
+            "kind": "outlet",
+            "wall": 0,
+            "offset": 30
+          }
+        ]
+      },
+      {
+        "name": "Common room",
+        "kind": "common",
+        "outline": [
+          [
+            125,
+            0
+          ],
+          [
+            305,
+            0
+          ],
+          [
+            305,
+            293
+          ],
+          [
+            125,
+            293
+          ]
+        ],
+        "features": [
+          {
+            "kind": "window",
+            "wall": 0,
+            "offset": 30,
+            "width": 44,
+            "height": 54,
+            "sill": 30
+          },
+          {
+            "kind": "radiator",
+            "wall": 0,
+            "offset": 37,
+            "width": 30,
+            "height": 24,
+            "depth": 6
+          },
+          {
+            "kind": "window",
+            "wall": 0,
+            "offset": 110,
+            "width": 44,
+            "height": 54,
+            "sill": 30
+          },
+          {
+            "kind": "door",
+            "wall": 1,
+            "offset": 120,
+            "width": 36,
+            "height": 80
+          },
+          {
+            "kind": "outlet",
+            "wall": 2,
+            "offset": 60
+          }
+        ]
+      }
+    ]
+  },
+  "default_layout": [
+    {
+      "slug": "bed-twin-xl",
+      "x": 20,
+      "y": 42,
+      "rotation": 0
+    },
+    {
+      "slug": "desk",
+      "x": 108,
+      "y": 40,
+      "rotation": 90
+    },
+    {
+      "slug": "desk-chair",
+      "x": 86,
+      "y": 40,
+      "rotation": 270
+    },
+    {
+      "slug": "dresser",
+      "x": 65,
+      "y": 134,
+      "rotation": 180
+    },
+    {
+      "slug": "bed-twin-xl",
+      "x": 20,
+      "y": 251,
+      "rotation": 180
+    },
+    {
+      "slug": "desk",
+      "x": 108,
+      "y": 250,
+      "rotation": 90
+    },
+    {
+      "slug": "desk-chair",
+      "x": 86,
+      "y": 250,
+      "rotation": 270
+    },
+    {
+      "slug": "dresser",
+      "x": 65,
+      "y": 159,
+      "rotation": 0
+    },
+    {
+      "slug": "futon",
+      "x": 142,
+      "y": 150,
+      "rotation": 90
+    },
+    {
+      "slug": "rug-5x8",
+      "x": 200,
+      "y": 150,
+      "rotation": 90
+    },
+    {
+      "slug": "bookcase",
+      "x": 260,
+      "y": 6,
+      "rotation": 0
+    },
+    {
+      "slug": "mini-fridge",
+      "x": 290,
+      "y": 11,
+      "rotation": 0
+    },
+    {
+      "slug": "floor-lamp",
+      "x": 135,
+      "y": 100,
+      "rotation": 0
+    }
+  ]
+}

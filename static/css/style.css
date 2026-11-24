@@ -380,6 +380,11 @@ kbd {
     max-width: 36rem;
 }
 
+/* The suite facts page: wide enough for its table of rooms. */
+.facts-card {
+    max-width: 50rem;
+}
+
 .c3-footer {
     background: var(--c3-ink);
     color: #a8a09c;

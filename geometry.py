@@ -1,4 +1,14 @@
-"""Room-format helpers and validation (the contract, SPEC.md section 4).
+"""Suite-format helpers and validation (the contract, SPEC.md section 4).
+
+A suite (format version 2) is one or more rooms (bedrooms and a common room)
+laid out in one shared floor plan:
+
+    {"version": 2, "units": "in", "ceiling": 102,
+     "rooms": [{"name": "Bedroom A", "kind": "bedroom",
+                "outline": [[0, 0], [120, 0], ...], "features": [...]}, ...]}
+
+Each room's outline and features follow the same rules as before; the wall
+helpers below work on one room's outline.
 
 THIS FILE IS SHARED. static/js/shared/geometry.js holds the same wall helpers
 in JavaScript; any change here needs the matching change there, and all three
@@ -17,8 +27,11 @@ FEATURE_KINDS = ("door", "window", "closet", "radiator", "outlet")
 # Limits from the table in SPEC.md 4.2.
 MIN_CEILING, MAX_CEILING = 72, 240
 MIN_CORNERS, MAX_CORNERS = 3, 12
-MAX_COORDINATE = 600
-MAX_FEATURES = 40
+MAX_COORDINATE = 1200   # inches (100 ft), so a whole suite fits in one plan
+MAX_FEATURES = 40       # per room
+MAX_ROOMS = 8
+MAX_ROOM_NAME = 40
+ROOM_KINDS = ("bedroom", "common")
 
 # Limits for placements (SPEC.md 4.4 and 7.2).
 MAX_PLACEMENTS = 100
@@ -118,28 +131,68 @@ def feature_span(outline, feature):
 # Validation
 # ---------------------------------------------------------------------------
 
-def validate_room(room):
-    """Check a room-format dict against every rule in SPEC.md 4.2.
+def validate_suite(suite):
+    """Check a suite-format dict (version 2) against every rule in SPEC.md 4.2.
 
     Returns a list of error messages written for a person (empty when the
-    room is valid), so the admin builder can show them next to the form.
+    suite is valid). Problems inside a room start with the room's name,
+    e.g. "Bedroom A: Window 1 is wider than wall C (42 in on a 36 in wall)."
     """
-    if not isinstance(room, dict):
-        return ["The room must be a JSON object."]
+    if not isinstance(suite, dict):
+        return ["The suite must be a JSON object."]
 
     errors = []
-    if room.get("version") != 1 or not _is_int(room.get("version")):
-        errors.append("Version must be 1.")
-    if room.get("units") != "in":
+    if suite.get("version") != 2 or not _is_int(suite.get("version")):
+        errors.append("Version must be 2.")
+    if suite.get("units") != "in":
         errors.append('Units must be "in".')
 
-    ceiling = room.get("ceiling")
+    ceiling = suite.get("ceiling")
     ceiling_ok = _is_int(ceiling) and MIN_CEILING <= ceiling <= MAX_CEILING
     if not ceiling_ok:
         errors.append(
             f"Ceiling must be a whole number of inches from {MIN_CEILING} "
             f"to {MAX_CEILING} (got {ceiling!r})."
         )
+
+    rooms = suite.get("rooms")
+    if not isinstance(rooms, list) or not 1 <= len(rooms) <= MAX_ROOMS:
+        errors.append(f"A suite needs 1 to {MAX_ROOMS} rooms.")
+        return errors
+
+    # Without a valid ceiling, height checks fall back to the maximum.
+    limit = ceiling if ceiling_ok else MAX_CEILING
+    good_outlines = []
+    for number, room in enumerate(rooms, start=1):
+        label = _room_label(room, number)
+        room_errors = validate_room(room, limit)
+        errors.extend(f"{label}: {error}" for error in room_errors)
+        if isinstance(room, dict) and not _validate_outline(room.get("outline")):
+            good_outlines.append((label, room["outline"]))
+
+    # Rooms may touch or have a gap between them (a wall), but not overlap.
+    for i, (label_a, outline_a) in enumerate(good_outlines):
+        for label_b, outline_b in good_outlines[i + 1:]:
+            if _rooms_overlap(outline_a, outline_b):
+                errors.append(f"{label_a} and {label_b} overlap. Rooms may share a wall but not floor space.")
+    return errors
+
+
+def validate_room(room, ceiling):
+    """Check one room of a suite: its name, kind, outline and features.
+
+    `ceiling` is the suite's ceiling height (or the maximum, if the suite's
+    is invalid). Messages don't name the room; validate_suite adds that.
+    """
+    if not isinstance(room, dict):
+        return ["Each room must be a JSON object."]
+
+    errors = []
+    name = room.get("name")
+    if not isinstance(name, str) or not 1 <= len(name.strip()) <= MAX_ROOM_NAME:
+        errors.append(f"Give the room a name of 1 to {MAX_ROOM_NAME} characters.")
+    if room.get("kind") not in ROOM_KINDS:
+        errors.append("Room kind must be bedroom or common.")
 
     outline_errors = _validate_outline(room.get("outline"))
     errors.extend(outline_errors)
@@ -151,16 +204,61 @@ def validate_room(room):
         errors.append(f"A room can have at most {MAX_FEATURES} features.")
     elif not outline_errors:
         # Feature checks need wall lengths, so they only run on a good outline.
-        # Without a valid ceiling, height checks fall back to the maximum.
-        limit = ceiling if ceiling_ok else MAX_CEILING
-        errors.extend(_validate_features(room["outline"], features, limit))
+        errors.extend(_validate_features(room["outline"], features, ceiling))
     return errors
 
 
-def validate_placements(placements, room, furniture_ids):
+def suite_outlines(suite):
+    """Return every room's outline in a (valid) suite."""
+    return [room["outline"] for room in suite["rooms"]]
+
+
+def _room_label(room, number):
+    """How messages name a room: its name if it has a usable one, else "Room 2"."""
+    name = room.get("name") if isinstance(room, dict) else None
+    if isinstance(name, str) and 1 <= len(name.strip()) <= MAX_ROOM_NAME:
+        return name.strip()
+    return f"Room {number}"
+
+
+def _strictly_inside(point, outline):
+    """True if point is inside the outline and not on its boundary."""
+    px, py = point
+    inside = False
+    for (ax, ay), (bx, by) in walls(outline):
+        if _orientation((ax, ay), (bx, by), (px, py)) == 0 and _on_segment((ax, ay), (px, py), (bx, by)):
+            return False  # on the boundary
+        if (ay > py) != (by > py) and px < ax + (py - ay) * (bx - ax) / (by - ay):
+            inside = not inside
+    return inside
+
+
+def _rooms_overlap(outline_a, outline_b):
+    """Do two room outlines share floor space (not just a wall or a corner)?
+
+    They do if any wall of one properly crosses a wall of the other, or if a
+    point just inside any wall of one lies strictly inside the other (which
+    also catches one room drawn entirely inside another).
+    """
+    for p1, p2 in walls(outline_a):
+        for p3, p4 in walls(outline_b):
+            d1, d2 = _orientation(p3, p4, p1), _orientation(p3, p4, p2)
+            d3, d4 = _orientation(p1, p2, p3), _orientation(p1, p2, p4)
+            if d1 * d2 < 0 and d3 * d4 < 0:
+                return True
+    for first, second in ((outline_a, outline_b), (outline_b, outline_a)):
+        for i, (start, end) in enumerate(walls(first)):
+            nx, ny = inward_normal(first, i)
+            probe = ((start[0] + end[0]) / 2 + nx * 0.5, (start[1] + end[1]) / 2 + ny * 0.5)
+            if _strictly_inside(probe, second):
+                return True
+    return False
+
+
+def validate_placements(placements, suite, furniture_ids):
     """Check a layout's placements (SPEC.md 4.4) before the server stores them.
 
-    `room` must be a valid room-format dict; `furniture_ids` is the set of ids
+    `suite` must be a valid suite-format dict; `furniture_ids` is the set of ids
     in the furniture catalog (passed in so this file never touches the
     database). Returns a list of messages for a person, empty when all is well.
 
@@ -173,9 +271,10 @@ def validate_placements(placements, room, furniture_ids):
     if len(placements) > MAX_PLACEMENTS:
         return [f"A layout can have at most {MAX_PLACEMENTS} items (got {len(placements)})."]
 
-    xs = [x for x, _ in room["outline"]]
-    ys = [y for _, y in room["outline"]]
-    bounds = (min(xs), min(ys), max(xs), max(ys))
+    corners = [corner for outline in suite_outlines(suite) for corner in outline]
+    xs = [x for x, _ in corners]
+    ys = [y for _, y in corners]
+    bounds = (min(xs), min(ys), max(xs), max(ys))  # the whole suite's bounding box
 
     errors = []
     for number, placement in enumerate(placements, start=1):

@@ -32,6 +32,7 @@ const MAX_CEILING = 240;
 const MIN_WALLS = 4; // at right angles, a closed room needs at least four walls
 const MAX_WALLS = 12;
 const MAX_FEATURES = 40;
+const SINGLE_ROOM_NAME = "Main room"; // the one room, until the builder handles several (U3)
 const EPSILON = 1e-9; // as in geometry.py: diagonal wall lengths aren't whole numbers
 
 export const FEATURE_KINDS = ["door", "window", "closet", "radiator", "outlet"];
@@ -373,7 +374,11 @@ export function buildGeometry({ shape, width, length, walls, ceiling, features =
     errors.push(...result.general, ...result.perFeature.flat());
   }
 
-  const geometry = outline && { version: 1, units: "in", ceiling, outline, features };
+  // A suite (format version 2) with one room. U3 adds more rooms.
+  const geometry = outline && {
+    version: 2, units: "in", ceiling,
+    rooms: [{ name: SINGLE_ROOM_NAME, kind: "bedroom", outline, features }],
+  };
   return { geometry, errors, openEnd, featureErrors };
 }
 
@@ -388,15 +393,20 @@ export function buildGeometry({ shape, width, length, walls, ceiling, features =
  * A plain rectangle starting at (0, 0) opens in Rectangle mode. Any other
  * outline whose walls all run north, south, east or west opens as walked
  * walls, starting from its first corner. Angled walls can't be shown in
- * either mode, so those return null.
+ * either mode, and nor (until U3) can a suite with several rooms, so those
+ * return null.
  *
- * @param {{ceiling: number, outline: number[][], features: object[]}} geometry
+ * @param {{ceiling: number, rooms: {outline: number[][], features: object[]}[]}} geometry
  * @returns {{shape: "rectangle" | "walls", width?: number, length?: number,
  *   walls: {direction: string, length: number}[], ceiling: number,
  *   features: object[]} | null}
  */
 export function geometryToForm(geometry) {
-  const { outline, ceiling, features } = geometry;
+  if (geometry.rooms.length !== 1) {
+    return null;
+  }
+  const { ceiling } = geometry;
+  const { outline, features } = geometry.rooms[0];
   const [width, length] = [outline[1]?.[0], outline[2]?.[1]];
   const isRectangle = outline.length === 4 &&
     JSON.stringify(outline) === JSON.stringify(rectangleOutline(width, length));

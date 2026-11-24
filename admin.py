@@ -11,7 +11,7 @@ from datetime import date
 
 from flask import Blueprint, flash, jsonify, redirect, render_template, request, session, url_for
 
-from geometry import validate_room
+from geometry import validate_suite
 from helpers import (admin_required, apology, db, insert_placements, json_error, normalize_email,
                      placements_error, run_in_transaction)
 
@@ -80,7 +80,7 @@ def read_suite_type_form(form, type_id=None):
     Returns (values, geometry_text, geometry, errors): the trimmed text
     fields (to show again if there are errors), the raw geometry JSON, the
     parsed geometry (or None), and a list of problems written for a person.
-    The geometry is checked with geometry.validate_room(), the same rules the
+    The geometry is checked with geometry.validate_suite(), the same rules the
     builder's preview applies, because a browser can always be bypassed.
     """
     values = {field: (form.get(field) or "").strip() for field in ROOM_TYPE_FIELDS}
@@ -120,7 +120,7 @@ def read_suite_type_form(form, type_id=None):
         except ValueError:
             errors.append("The room's shape couldn't be read. Reload the page and try again.")
         else:
-            errors.extend(validate_room(geometry))
+            errors.extend(validate_suite(geometry))
     return values, geometry_text, geometry, errors
 
 
@@ -234,7 +234,7 @@ def publish_suite_type(type_id):
     suite_type = find_suite_type(type_id)
     if suite_type is None:
         return apology("We couldn't find that suite type.", 404)
-    errors = validate_room(json.loads(suite_type["geometry"]))
+    errors = validate_suite(json.loads(suite_type["geometry"]))
     if errors:
         flash(f"Can't publish {suite_type['name']} yet: {errors[0]}")
     else:

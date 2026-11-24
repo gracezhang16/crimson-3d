@@ -18,12 +18,12 @@ from pathlib import Path
 
 from cs50 import SQL
 
-from geometry import validate_room
+from geometry import validate_suite
 
 ROOT = Path(__file__).parent
 SCHEMA = ROOT / "schema.sql"
 FURNITURE_FILE = ROOT / "seed" / "furniture.json"
-ROOMS_DIR = ROOT / "seed" / "rooms"
+SUITES_DIR = ROOT / "seed" / "suites"
 
 DEFAULT_URL = "sqlite:///crimson3d.db"
 SQLITE_PREFIX = "sqlite:///"
@@ -45,8 +45,8 @@ def build_database(url):
 
     db = SQL(url)
     slugs = load_furniture(db)
-    for room_file in sorted(ROOMS_DIR.glob("*.json")):
-        load_suite_type(db, room_file, slugs)
+    for suite_file in sorted(SUITES_DIR.glob("*.json")):
+        load_suite_type(db, suite_file, slugs)
 
 
 def load_furniture(db):
@@ -64,11 +64,11 @@ def load_furniture(db):
 
 
 def load_suite_type(db, room_file, slugs):
-    """Insert one seed/rooms/*.json file: its dorm (if new), room type and default layout."""
+    """Insert one seed/suites/*.json file: its dorm (if new), suite type and default layout."""
     room = json.loads(room_file.read_text())
 
-    # Refuse to load a room the planner could not draw.
-    errors = validate_room(room["geometry"])
+    # Refuse to load a suite the planner could not draw.
+    errors = validate_suite(room["geometry"])
     if errors:
         sys.exit(f"{room_file.name} has an invalid geometry:\n  " + "\n  ".join(errors))
 
