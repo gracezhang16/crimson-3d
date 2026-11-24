@@ -15,7 +15,7 @@
  */
 
 import * as THREE from "three";
-import { makeFurniture, setIssueTint } from "./furniture.js";
+import { makeFurniture, setIssueTint, setLabelVisible } from "./furniture.js";
 import { evaluate, findFreeSpot, footprint, footprintBox, itemDimensions, snap, zones } from "./rules.js";
 
 const SELECTION_COLOR = 0xa51c30;  // crimson (SPEC.md 8.4)
@@ -49,6 +49,7 @@ export function createLayout(geometry, catalogById, scene, requestRender) {
     entries.forEach((entry, i) => {
       entry.issue = issues[i];
       setIssueTint(entry.group, entry.issue !== null);
+      setLabelVisible(entry.group, entry === selected); // names show on the selected item only
     });
     updateSelectionOutline(outlineMesh, selected);
     requestRender();

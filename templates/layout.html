@@ -1,7 +1,5 @@
 <!DOCTYPE html>
-{# data-bs-theme="dark" switches Bootstrap to its dark mode; style.css tunes
-   the colours to near-black and crimson. #}
-<html lang="en" data-bs-theme="dark">
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -35,7 +33,9 @@
     {# `endpoint` names the current route (e.g. "pages.my_layouts") so the
        matching navbar link can be marked as the current page. #}
     {% set endpoint = request.endpoint or "" %}
-    <nav class="navbar navbar-expand-md c3-navbar sticky-top">
+    {# data-bs-theme="dark" on the black navbar alone makes Bootstrap draw its
+       menu button and dropdowns in light-on-dark colours. #}
+    <nav class="navbar navbar-expand-md c3-navbar sticky-top" data-bs-theme="dark">
         <div class="container">
             <a class="navbar-brand c3-brand" href="{{ url_for('pages.index') }}">
                 {# A small isometric cube: the "3D" in Crimson3D. Decorative only. #}

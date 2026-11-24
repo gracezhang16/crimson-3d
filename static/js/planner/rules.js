@@ -90,21 +90,25 @@ const CUSTOM_ITEM_COLOR = "#9aa1ad";
  * @param {{furniture_id: number | null, label?: string, width?: number,
  *   depth?: number, height?: number}} placement
  * @param {Map<number, object>} catalogById - /api/furniture rows by id
- * @returns {{name: string, width: number, depth: number, height: number,
- *   clearance: number, color: string, category: string} | null} null if the
- *   catalog item no longer exists
+ * `slug` picks the item's 3D shape (shapes.js); custom items have none.
+ *
+ * @returns {{name: string, slug: string | null, width: number, depth: number,
+ *   height: number, clearance: number, color: string, category: string} | null}
+ *   null if the catalog item no longer exists
  */
 export function itemDimensions(placement, catalogById) {
   if (placement.furniture_id === null) {
     const { label, width, depth, height } = placement;
-    return { name: label, width, depth, height, clearance: 0, color: CUSTOM_ITEM_COLOR, category: "custom" };
+    return {
+      name: label, slug: null, width, depth, height, clearance: 0, color: CUSTOM_ITEM_COLOR, category: "custom",
+    };
   }
   const item = catalogById.get(placement.furniture_id);
   if (!item) {
     return null;
   }
-  const { name, width, depth, height, clearance, color, category } = item;
-  return { name, width, depth, height, clearance, color, category };
+  const { name, slug, width, depth, height, clearance, color, category } = item;
+  return { name, slug, width, depth, height, clearance, color, category };
 }
 
 /**

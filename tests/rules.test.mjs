@@ -78,7 +78,8 @@ const CATALOG = new Map([[1, BED]]);
 
 test("itemDimensions takes a catalog item's size from the catalog", () => {
   assert.deepEqual(itemDimensions({ furniture_id: 1, x: 0, y: 0, rotation: 0 }, CATALOG), {
-    name: "Bed, twin XL", width: 40, depth: 84, height: 36, clearance: 14, color: "#b8875a", category: "harvard",
+    name: "Bed, twin XL", slug: "bed-twin-xl", width: 40, depth: 84, height: 36, clearance: 14,
+    color: "#b8875a", category: "harvard",
   });
 });
 
@@ -88,6 +89,7 @@ test("itemDimensions takes a custom item's size from the placement", () => {
   assert.equal(item.name, "Bean bag chair");
   assert.deepEqual([item.width, item.depth, item.height, item.clearance], [36, 36, 28, 0]);
   assert.equal(item.category, "custom");
+  assert.equal(item.slug, null);   // no special 3D shape: drawn as a box
 });
 
 test("itemDimensions returns null for an item no longer in the catalog", () => {

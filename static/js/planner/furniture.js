@@ -1,15 +1,19 @@
 /**
  * Furniture in 3D (SPEC.md 8.4). Claire.
  *
- * Good tier: each item is a box at true size in its catalog colour, with a
- * darker top edge and its name on a small label lying on top. Composite
- * shapes (bed frame + mattress, desk + legs) are a Better-tier option.
+ * Catalog items are drawn as what they are (shapes.js: a bed with legs,
+ * mattress and headboard, a desk with drawers, ...). Items with no shape,
+ * like custom "will it fit" items, are boxes at true size in their colour
+ * with darker edges. Each item also has its name on a small label lying on
+ * top, shown only while it's selected (layout.js); the panel lists every
+ * item by name.
  *
  * Each item is a THREE.Group whose origin is the centre of its footprint at
  * floor level, so moving it (P5) only changes group.position.x and .z.
  */
 
 import * as THREE from "three";
+import { buildShape } from "./shapes.js";
 
 const LABEL_PIXELS_PER_INCH = 8;   // label texture resolution
 const ISSUE_ORANGE = new THREE.Color("#f08c2e"); // SPEC.md 4.5 rule 8: items with an issue are tinted orange
@@ -27,7 +31,7 @@ const LABEL_FONT = "600 {size}px system-ui, -apple-system, 'Segoe UI', sans-seri
  */
 export function makeFurniture(placement, item) {
   const group = new THREE.Group();
-  group.add(makeBody(item));
+  group.add(buildShape(item) ?? makeBody(item));
   group.add(makeLabel(item, placement.rotation));
 
   // Plan x, y -> three.js x, z (SPEC.md 4.1).
@@ -49,9 +53,28 @@ export function makeFurniture(placement, item) {
  * @param {boolean} hasIssue
  */
 export function setIssueTint(group, hasIssue) {
-  const body = group.children[0];
-  const base = body.userData.baseColor;
-  body.material.color.copy(hasIssue ? base.clone().lerp(ISSUE_ORANGE, ISSUE_TINT) : base);
+  // traverse() visits the group and everything inside it: every part of a
+  // composite shape remembers its own colour in userData.baseColor.
+  group.traverse((object) => {
+    const base = object.userData.baseColor;
+    if (object.isMesh && base) {
+      object.material.color.copy(hasIssue ? base.clone().lerp(ISSUE_ORANGE, ISSUE_TINT) : base);
+    }
+  });
+}
+
+/**
+ * Show or hide an item's name label.
+ *
+ * @param {THREE.Group} group - from makeFurniture()
+ * @param {boolean} visible
+ */
+export function setLabelVisible(group, visible) {
+  group.traverse((object) => {
+    if (object.userData.isLabel) {
+      object.visible = visible;
+    }
+  });
 }
 
 /**
@@ -98,6 +121,8 @@ function makeLabel(item, rotation) {
     new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false }),
   );
   label.position.y = item.height + 0.3; // just above the top, so it doesn't flicker
+  label.userData.isLabel = true;
+  label.visible = false;                 // layout.js shows it while the item is selected
   // A plane stands upright facing +z. The rotations apply z first: turn the
   // text a quarter if it should run along the depth, then lay it flat (x by
   // -90°). Unturned, text runs east; along the depth it runs north.
