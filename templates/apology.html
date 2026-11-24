@@ -1,0 +1,11 @@
+{% extends "layout.html" %}
+
+{% block title %}Error {{ code }}{% endblock %}
+
+{% block main %}
+    <div class="text-center py-5">
+        <p class="display-4 fw-semibold text-body-secondary mb-2">{{ code }}</p>
+        <h1 class="h4 mb-4">{{ message }}</h1>
+        <a class="btn btn-outline-secondary" href="{{ url_for('pages.index') }}">Back to dorms</a>
+    </div>
+{% endblock %}
