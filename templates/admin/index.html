@@ -36,13 +36,15 @@
         <a class="list-group-item list-group-item-action" href="{{ url_for('admin.new_room_type') }}">
             New room type <span class="text-body-secondary small">· draw a room from its measurements</span>
         </a>
+        <a class="list-group-item list-group-item-action" href="{{ url_for('admin.rooms') }}">
+            Rooms and student assignments <span class="text-body-secondary small">· link students to their rooms</span>
+        </a>
         <a class="list-group-item list-group-item-action" href="{{ url_for('admin.dorms') }}">
             Dorms <span class="text-body-secondary small">· add the dorms rooms belong to</span>
         </a>
         {# Pages still to be built, listed so the plan is visible. Each becomes a
            link when its milestone lands (SPEC.md 10, admin track). #}
         {% for name, milestone in [
-            ("Rooms and student assignments", "A5"),
             ("Furniture catalog", "A7"),
         ] %}
             <span class="list-group-item text-body-secondary">

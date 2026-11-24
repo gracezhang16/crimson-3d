@@ -12,7 +12,7 @@ from datetime import date
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 
 from geometry import validate_room
-from helpers import admin_required, apology, db
+from helpers import admin_required, apology, db, normalize_email
 
 admin = Blueprint("admin", __name__)
 
@@ -27,6 +27,7 @@ BATHROOMS = ("en-suite", "hallway", "shared-suite")
 MAX_TYPE_NAME = 60
 MAX_MEASURED_BY = 60
 MAX_NOTES = 500
+MAX_ROOM_NUMBER = 20
 
 
 def count(sql, *args):
@@ -304,3 +305,136 @@ def dorm_problem(form):
     if len(form["description"]) > MAX_DESCRIPTION:
         return f"The description can be at most {MAX_DESCRIPTION} characters."
     return None
+
+
+# ---------------------------------------------------------------------------
+# Rooms and assignments (SPEC.md 7.3, 9.3)
+# ---------------------------------------------------------------------------
+
+@admin.route("/rooms", methods=["GET", "POST"])
+@admin_required
+def rooms():
+    """List rooms with their students; on POST, add a room.
+
+    A room is a thin record pointing at a room type (SPEC.md 1). Its dorm is
+    taken from the room type, so the two can never disagree.
+    """
+    if request.method == "POST":
+        add_room(request.form)
+        return redirect(url_for("admin.rooms"))
+
+    room_rows = db.execute(
+        "SELECT rooms.id, rooms.number, dorms.name AS dorm_name, "
+        "room_types.id AS type_id, room_types.name AS type_name, room_types.capacity "
+        "FROM rooms JOIN dorms ON dorms.id = rooms.dorm_id "
+        "JOIN room_types ON room_types.id = rooms.room_type_id "
+        "ORDER BY dorms.name, rooms.number"
+    )
+    students = db.execute(
+        "SELECT assignments.room_id, users.id, users.email FROM assignments "
+        "JOIN users ON users.id = assignments.user_id ORDER BY users.email"
+    )
+    for room in room_rows:
+        room["students"] = [s for s in students if s["room_id"] == room["id"]]
+    types = db.execute(
+        "SELECT room_types.id, room_types.name, room_types.status, dorms.name AS dorm_name "
+        "FROM room_types JOIN dorms ON dorms.id = room_types.dorm_id "
+        "ORDER BY dorms.name, room_types.name"
+    )
+    return render_template("admin/rooms.html", rooms=room_rows, types=types)
+
+
+def add_room(form):
+    """Add a room from the form, flashing what happened."""
+    number = (form.get("number") or "").strip()
+    type_id = form.get("room_type_id") or ""
+    types = db.execute("SELECT id, dorm_id FROM room_types WHERE id = ?", int(type_id)) if type_id.isdigit() else []
+    if not 1 <= len(number) <= MAX_ROOM_NUMBER:
+        flash(f"Give the room a number of 1 to {MAX_ROOM_NUMBER} characters, like B-21.")
+    elif not types:
+        flash("Pick a room type for the room.")
+    else:
+        try:
+            db.execute(
+                "INSERT INTO rooms (dorm_id, number, room_type_id) VALUES (?, ?, ?)",
+                types[0]["dorm_id"], number, types[0]["id"],
+            )
+        except ValueError:  # UNIQUE (dorm_id, number)
+            flash(f"That dorm already has a room {number}.")
+        else:
+            flash(f"Added room {number}.")
+
+
+def find_room(room_id):
+    """Return the room with its dorm name and capacity, or None."""
+    rows = db.execute(
+        "SELECT rooms.id, rooms.number, dorms.name AS dorm_name, room_types.capacity "
+        "FROM rooms JOIN dorms ON dorms.id = rooms.dorm_id "
+        "JOIN room_types ON room_types.id = rooms.room_type_id WHERE rooms.id = ?",
+        room_id,
+    )
+    return rows[0] if rows else None
+
+
+@admin.route("/rooms/<int:room_id>/assign", methods=["POST"])
+@admin_required
+def assign_room(room_id):
+    """Link a registered student (form field `email`) to this room.
+
+    A student has at most one room (assignments.user_id is the primary key),
+    so assigning someone who already has a room moves them. A room holds at
+    most its room type's capacity.
+    """
+    room = find_room(room_id)
+    if room is None:
+        return apology("We couldn't find that room.", 404)
+    email = normalize_email(request.form.get("email"))
+    users = db.execute("SELECT id FROM users WHERE email = ?", email)
+    label = f"{room['dorm_name']} {room['number']}"
+
+    if not users:
+        flash(f"No account with the email {email or '(blank)'}. Ask the student to register first.")
+        return redirect(url_for("admin.rooms"))
+    user_id = users[0]["id"]
+    current = db.execute(
+        "SELECT rooms.id, rooms.number, dorms.name AS dorm_name FROM assignments "
+        "JOIN rooms ON rooms.id = assignments.room_id JOIN dorms ON dorms.id = rooms.dorm_id "
+        "WHERE assignments.user_id = ?",
+        user_id,
+    )
+    if current and current[0]["id"] == room_id:
+        flash(f"{email} is already assigned to {label}.")
+        return redirect(url_for("admin.rooms"))
+    occupants = db.execute("SELECT COUNT(*) AS n FROM assignments WHERE room_id = ?", room_id)[0]["n"]
+    if occupants >= room["capacity"]:
+        flash(f"{label} is full (capacity {room['capacity']}). Unassign someone first.")
+        return redirect(url_for("admin.rooms"))
+
+    # INSERT OR REPLACE: if the student already has a row (a room), replace it.
+    db.execute("INSERT OR REPLACE INTO assignments (user_id, room_id) VALUES (?, ?)", user_id, room_id)
+    moved = f" (moved from {current[0]['dorm_name']} {current[0]['number']})" if current else ""
+    flash(f"Assigned {email} to {label}{moved}.")
+    return redirect(url_for("admin.rooms"))
+
+
+@admin.route("/rooms/<int:room_id>/unassign", methods=["POST"])
+@admin_required
+def unassign_room(room_id):
+    """Remove one student (form field `user_id`) from this room.
+
+    SPEC.md 7.3 lists no field here; a double can have two students, so the
+    form says which one.
+    """
+    room = find_room(room_id)
+    if room is None:
+        return apology("We couldn't find that room.", 404)
+    user_id = request.form.get("user_id") or ""
+    removed = db.execute(
+        "DELETE FROM assignments WHERE room_id = ? AND user_id = ?",
+        room_id, int(user_id) if user_id.isdigit() else -1,
+    )
+    if removed:
+        flash(f"Unassigned from {room['dorm_name']} {room['number']}.")
+    else:
+        flash("That student isn't assigned to this room.")
+    return redirect(url_for("admin.rooms"))

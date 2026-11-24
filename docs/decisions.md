@@ -216,3 +216,18 @@ Technical choices:
 - **Plan rotation is clockwise but three.js turns anticlockwise**, seen from above, so `rotation.y = -angle`. At rotation 0, width runs along plan x and depth along plan y, with the front facing south (SPEC.md 4.4).
 - **Labels are canvas textures laid on top of each box, along its longer side, with the text shrunk to fit.** They turn with their item but get an extra half turn when they'd otherwise read upside down from the usual south-east view (the double's wardrobes face north). They use a basic material, so lighting doesn't dim them, and don't write depth, so their transparent parts can't hide anything.
 - **A placement whose catalog item no longer exists is skipped with a console warning.** The server checks ids on save, so this only happens if an admin deletes a catalog item later.
+
+## 2026-11-24 (A5, built for Hannah with the team's agreement)
+
+Product choices confirmed by Grace:
+
+- **Assigning a student who already has a room moves them**, and the message says where from ("moved from Demo Hall C-3"). The schema allows one room per student (`assignments.user_id` is the primary key). Alternative: refuse until they're unassigned.
+- **A room holds at most its room type's capacity**: a third student in a double is refused with "Demo Hall B-21 is full (capacity 2)". Alternative: allow it with a warning.
+
+Technical choices:
+
+- **A room's dorm comes from its room type** (the form asks for number and type only), so `rooms.dorm_id` can never disagree with the type's dorm. The type list is grouped by dorm with `<optgroup>`.
+- **Unassign takes a hidden `user_id` field**, which SPEC.md 7.3 doesn't list: a double can hold two students, so the form must say which one to remove.
+- **Moving uses `INSERT OR REPLACE`**: because `user_id` is the primary key of `assignments`, the student's old row is replaced by the new one in a single statement.
+- **The rooms page reports outcomes with flash messages and redirects after every POST** (add, assign, unassign), so reloading never repeats an action. Emails are trimmed and lower-cased with `normalize_email`, as at registration.
+- **Room numbers are 1–20 characters, unique per dorm** (`UNIQUE (dorm_id, number)`).

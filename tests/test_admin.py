@@ -317,3 +317,112 @@ def test_editing_keeps_its_own_name(client):
     single = db.execute("SELECT id FROM room_types WHERE name = 'Single (sample)'")[0]["id"]
     response = admin_client(client).post(f"/admin/types/{single}/edit", data=builder_form(name="Single (sample)"))
     assert response.status_code == 302
+
+
+# --- A5: rooms and assignments -------------------------------------------------
+
+def type_id_named(name):
+    return db.execute("SELECT id FROM room_types WHERE name = ?", name)[0]["id"]
+
+
+def add_student(email):
+    return db.execute("INSERT INTO users (email, hash) VALUES (?, 'x')", email)
+
+
+def make_room(number="B-21", type_name="Double (sample)"):
+    """Insert a room directly and return its id."""
+    room_type = db.execute("SELECT id, dorm_id FROM room_types WHERE name = ?", type_name)[0]
+    return db.execute(
+        "INSERT INTO rooms (dorm_id, number, room_type_id) VALUES (?, ?, ?)",
+        room_type["dorm_id"], number, room_type["id"],
+    )
+
+
+def test_add_room(client):
+    response = admin_client(client).post("/admin/rooms", data={"number": " B-21 ", "room_type_id": type_id_named("Double (sample)")})
+    assert response.status_code == 302
+    room = db.execute("SELECT * FROM rooms")[0]
+    assert room["number"] == "B-21"
+    assert room["dorm_id"] == demo_hall_id()               # taken from the room type
+    page = client.get("/admin/rooms").get_data(as_text=True)
+    assert "Added room B-21." in page and "Demo Hall B-21" in page and "0 of 2" in page
+
+
+@pytest.mark.parametrize("data, message", [
+    ({"number": "", "room_type_id": "1"}, "number of 1 to 20"),
+    ({"number": "x" * 21, "room_type_id": "1"}, "number of 1 to 20"),
+    ({"number": "A-1", "room_type_id": "999"}, "Pick a room type"),
+    ({"number": "A-1", "room_type_id": "abc"}, "Pick a room type"),
+])
+def test_add_room_validates(client, data, message):
+    admin_client(client).post("/admin/rooms", data=data)
+    assert message in client.get("/admin/rooms").get_data(as_text=True)
+    assert db.execute("SELECT COUNT(*) AS n FROM rooms")[0]["n"] == 0
+
+
+def test_room_numbers_are_unique_per_dorm(client):
+    make_room("B-21")
+    admin_client(client).post("/admin/rooms", data={"number": "B-21", "room_type_id": type_id_named("Single (sample)")})
+    assert "already has a room B-21" in client.get("/admin/rooms").get_data(as_text=True)
+
+
+def test_assigned_student_sees_my_room(client):
+    room_id = make_room("B-21", "Single (sample)")
+    student_id = add_student("frosh@example.com")
+    admin_client(client).post(f"/admin/rooms/{room_id}/assign", data={"email": " Frosh@Example.com "})
+    assert db.execute("SELECT room_id FROM assignments WHERE user_id = ?", student_id)[0]["room_id"] == room_id
+    assert "Assigned frosh@example.com to Demo Hall B-21." in client.get("/admin/rooms").get_data(as_text=True)
+
+    # The A5 "done when": the student now has My room, and it opens their planner.
+    with client.session_transaction() as session:
+        session["user_id"] = student_id
+    assert "My room" in client.get("/").get_data(as_text=True)
+    response = client.get("/my-room")
+    assert response.headers["Location"] == f"/plan/{type_id_named('Single (sample)')}"
+
+
+def test_assign_unknown_email(client):
+    room_id = make_room()
+    admin_client(client).post(f"/admin/rooms/{room_id}/assign", data={"email": "nobody@example.com"})
+    assert "Ask the student to register first" in client.get("/admin/rooms").get_data(as_text=True)
+    assert db.execute("SELECT COUNT(*) AS n FROM assignments")[0]["n"] == 0
+
+
+def test_assigning_again_moves_the_student(client):
+    first, second = make_room("B-21"), make_room("B-22")
+    student_id = add_student("frosh@example.com")
+    admin_client(client).post(f"/admin/rooms/{first}/assign", data={"email": "frosh@example.com"})
+    client.post(f"/admin/rooms/{second}/assign", data={"email": "frosh@example.com"})
+    assert db.execute("SELECT room_id FROM assignments WHERE user_id = ?", student_id) == [{"room_id": second}]
+    assert "(moved from Demo Hall B-21)" in client.get("/admin/rooms").get_data(as_text=True)
+
+
+def test_a_full_room_refuses_another_student(client):
+    room_id = make_room("B-21", "Double (sample)")          # capacity 2
+    for email in ("a@example.org", "b@example.org", "c@example.org"):
+        add_student(email)
+    admin_client(client)
+    for email in ("a@example.org", "b@example.org", "c@example.org"):
+        client.post(f"/admin/rooms/{room_id}/assign", data={"email": email})
+    assert db.execute("SELECT COUNT(*) AS n FROM assignments")[0]["n"] == 2
+    page = client.get("/admin/rooms").get_data(as_text=True)
+    assert "Demo Hall B-21 is full (capacity 2)" in page
+
+
+def test_unassign(client):
+    room_id = make_room()
+    student_id = add_student("frosh@example.com")
+    db.execute("INSERT INTO assignments (user_id, room_id) VALUES (?, ?)", student_id, room_id)
+    admin_client(client).post(f"/admin/rooms/{room_id}/unassign", data={"user_id": student_id})
+    assert db.execute("SELECT COUNT(*) AS n FROM assignments")[0]["n"] == 0
+    assert "Unassigned from Demo Hall B-21." in client.get("/admin/rooms").get_data(as_text=True)
+
+
+def test_unassign_someone_not_in_the_room(client):
+    room_id = make_room()
+    admin_client(client).post(f"/admin/rooms/{room_id}/unassign", data={"user_id": "999"})
+    assert "isn&#39;t assigned to this room" in client.get("/admin/rooms").get_data(as_text=True)
+
+
+def test_assign_to_missing_room_is_404(client):
+    assert admin_client(client).post("/admin/rooms/999/assign", data={"email": "x@example.com"}).status_code == 404
