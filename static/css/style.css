@@ -477,9 +477,28 @@ kbd {
     fill: var(--crimson-bright);
 }
 
-/* Keep the sticky preview below the page top on wide screens. */
+/* Suites in the preview: rooms not being edited are lighter and clickable. */
+.preview-room:not(.is-selected) {
+    opacity: 0.5;
+    cursor: pointer;
+}
+
+.preview-room:not(.is-selected):hover {
+    opacity: 0.75;
+}
+
+.preview-room-name {
+    fill: var(--crimson);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+/* Keep the sticky preview just below the (also sticky) navbar on wide
+   screens, and under it when they meet, not on top of it. */
 .builder-preview.sticky-lg-top {
-    top: 1rem;
+    top: calc(var(--c3-nav-height) + 1rem);
+    z-index: 1;
 }
 
 /* Builder features table: number boxes just wide enough for 3 digits, and
@@ -494,4 +513,21 @@ kbd {
 
 .features-table .feature-wall {
     min-width: 4.5rem;
+}
+
+/* The builder's room editor: one card for the selected room. */
+.room-editor {
+    padding: 1rem 1rem 1.25rem;
+    border: 1px solid var(--c3-line);
+    border-left: 3px solid var(--crimson);
+    border-radius: var(--bs-border-radius-lg);
+    background: var(--c3-surface-raised);
+}
+
+#room-tabs .btn[aria-pressed="true"] {
+    font-weight: 600;
+}
+
+.place-gap {
+    width: 5rem;
 }

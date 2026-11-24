@@ -330,3 +330,15 @@ Technical choices:
 - **"Crosses a wall" is a new issue**, ranked with "Outside the room": an item that isn't wholly inside one room and overlaps the strip an inside wall stands on (`insideWallBoxes`; a shared wall with no gap counts as 1 in thick) crosses a wall; anything else not inside a room is outside it. SPEC.md 4.5 rules 5 and 8 are updated with a dated note.
 - **Room names lie on each room's floor** in suites with more than one room, placed at the floor's area centroid (which stays inside the bulk of an L-shaped room, unlike its bounding box's middle).
 - **Known cosmetic issue:** where two rooms' outside walls are each lengthened across the gap at a corner, their top faces overlap for a few inches and can show a thin line.
+
+## 2026-11-24 (Suites, step U3: the builder for suites)
+
+- **One room editor with room tabs**, rather than every room's fields on the page at once: the tabs (plus "+ Add room") pick which room the editor shows, and clicking a room in the preview does the same. `main.js` keeps every room's typed values in a list and saves the editor into it before switching, so nothing typed is lost. Alternative: one long form with a section per room, which gets unwieldy at four or five rooms and repeats every field's id.
+- **Rooms are stored as the text typed** (`state.newRoom`), and `parseRoom` turns that into numbers when the suite is built. This keeps half-typed values (like "12a") in their box when switching rooms, instead of silently blanking them.
+- **A room's position is its north-west corner** in the suite (inches from the suite's west and north sides); the walked or rectangular shape is built from (0, 0) and moved there. Positions must be 0–1200 in.
+- **"Place … east of / south of [room] with a [5] in wall"** fills in the position from the other room's bounding box (`state.positionNextTo`), and **"+ Add room"** places the new room east of the current one the same way, so admins rarely type positions. A new room is named "Common room" if there's none yet, then "Bedroom B", "Bedroom C"…
+- **The ceiling moved out of the room editor** into the suite's details, since all rooms share it (format version 2).
+- **`buildSuite` mirrors `validate_suite`** (names, kinds, positions, each room's shape and features, the ceiling), naming the room in each message when there are several rooms, except overlap between rooms, which only the server checks: the preview shows overlapping rooms plainly, and a rejected save keeps the suite.
+- **`geometryToForm` reopens any suite of right-angled rooms** (each room's position is its outline's minimum corner); a node test round-trips the sample suite through the form and back to the identical JSON.
+- **The preview draws the whole suite** (`drawSuite`): the selected room in full (features, corner arrows, wall labels), the others lighter with their names and clickable.
+- **The sticky preview now sits below the sticky navbar** (and under it when they meet).

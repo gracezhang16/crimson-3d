@@ -123,49 +123,115 @@ function svgElement(tag, attributes) {
 }
 
 /**
- * Draw the room on `svg`, replacing whatever was there.
+ * Draw a whole suite on `svg`, replacing whatever was there. The selected
+ * room is drawn in full (features, corner arrows, wall labels); the others
+ * are lighter, with just their name, and carry data-room="i" so a click on
+ * one can select it.
  *
  * @param {SVGSVGElement} svg
- * @param {{outline: number[][]} | null} geometry - null shows an empty preview
- * @param {number[] | null} [openEnd] - where an unclosed walk ends; the gap
- *   back to the first corner is drawn as a dashed red line
- * @param {string[][]} [featureErrors] - features with problems aren't drawn
+ * @param {{name: string, outline: number[][] | null, openEnd: number[] | null,
+ *   features: object[], featureErrors: string[][]}[]} rooms - from buildSuite()
+ * @param {number} selected - index of the room being edited
  */
-export function drawPreview(svg, geometry, openEnd = null, featureErrors = []) {
+export function drawSuite(svg, rooms, selected) {
   svg.replaceChildren();
-  if (!geometry) {
+  const drawable = rooms.filter((room) => room.outline);
+  if (!drawable.length) {
     svg.setAttribute("viewBox", "0 0 100 75");
     return;
   }
-  const { outline } = geometry;
-  const box = previewBox(openEnd ? [...outline, openEnd] : outline);
+  const points = drawable.flatMap((room) => (room.openEnd ? [...room.outline, room.openEnd] : room.outline));
+  const box = previewBox(points);
   svg.setAttribute("viewBox", `${box.x} ${box.y} ${box.width} ${box.height}`);
-  const points = outline.map(([x, y]) => `${x},${y}`).join(" ");
+  // The selected room last, so it's drawn on top of its neighbours.
+  const order = rooms.map((_, i) => i).filter((i) => i !== selected).concat(selected);
+  for (const i of order) {
+    if (rooms[i]?.outline) {
+      svg.append(drawRoom(rooms[i], i, box, i === selected, rooms.length > 1));
+    }
+  }
+}
+
+/**
+ * Draw one room (with the given shape) on `svg`: the one-room version of
+ * drawSuite(), kept for single rooms.
+ *
+ * @param {SVGSVGElement} svg
+ * @param {{outline: number[][], features?: object[]} | null} geometry
+ * @param {number[] | null} [openEnd]
+ * @param {string[][]} [featureErrors]
+ */
+export function drawPreview(svg, geometry, openEnd = null, featureErrors = []) {
+  const room = geometry && { name: "", outline: geometry.outline, features: geometry.features ?? [], openEnd, featureErrors };
+  drawSuite(svg, room ? [room] : [], 0);
+}
+
+/**
+ * One room of the suite as an SVG group.
+ *
+ * @param {object} room - a drawSuite() room
+ * @param {number} index
+ * @param {object} box - previewBox() of the whole suite
+ * @param {boolean} selected
+ * @param {boolean} named - write the room's name in it (suites with several rooms)
+ * @returns {SVGGElement}
+ */
+function drawRoom(room, index, box, selected, named) {
+  const { outline, openEnd } = room;
+  const group = svgElement("g", { class: `preview-room${selected ? " is-selected" : ""}`, "data-room": index });
+  const points = pointsText(outline);
 
   if (openEnd) {
     // An open walk isn't a room yet: draw the walls as a path, plus the gap.
-    const path = [...outline, openEnd].map(([x, y]) => `${x},${y}`).join(" ");
-    svg.append(svgElement("polyline", { points: path, class: "preview-walls", "vector-effect": "non-scaling-stroke" }));
-    svg.append(svgElement("line", {
+    group.append(svgElement("polyline", {
+      points: pointsText([...outline, openEnd]), class: "preview-walls", "vector-effect": "non-scaling-stroke",
+    }));
+    group.append(svgElement("line", {
       x1: openEnd[0], y1: openEnd[1], x2: outline[0][0], y2: outline[0][1],
       class: "preview-gap", "vector-effect": "non-scaling-stroke",
     }));
   } else {
-    // A clip path: anything drawn "clipped" by it only shows inside the room.
-    const clip = svgElement("clipPath", { id: "preview-room-clip" });
+    // A clip path: anything drawn "clipped" by it only shows inside this room.
+    const clipId = `preview-room-clip-${index}`;
+    const clip = svgElement("clipPath", { id: clipId });
     clip.append(svgElement("polygon", { points }));
-    svg.append(clip);
-    svg.append(svgElement("polygon", { points, class: "preview-floor" }));
-    svg.append(drawGrid(box));
-    svg.append(svgElement("polygon", { points, class: "preview-walls", "vector-effect": "non-scaling-stroke" }));
-    (geometry.features ?? []).forEach((feature, i) => {
-      if (!featureErrors[i]?.length) {
-        svg.append(drawFeature(outline, feature, box.margin));
-      }
-    });
-    drawCornerArrows(svg, outline, box.margin);
+    group.append(clip);
+    group.append(svgElement("polygon", { points, class: "preview-floor" }));
+    group.append(drawGrid(box, clipId));
+    group.append(svgElement("polygon", { points, class: "preview-walls", "vector-effect": "non-scaling-stroke" }));
+    if (selected) {
+      room.features.forEach((feature, i) => {
+        if (!room.featureErrors[i]?.length) {
+          group.append(drawFeature(outline, feature, box.margin));
+        }
+      });
+      drawCornerArrows(group, outline, box.margin);
+    }
   }
-  drawWallLabels(svg, wallSegments(outline, openEnd), box.margin);
+  if (selected) {
+    drawWallLabels(group, wallSegments(outline, openEnd), box.margin);
+  }
+  if (named) {
+    const [cx, cy] = roomCenter(outline);
+    const name = svgElement("text", {
+      x: cx, y: cy, "font-size": box.margin * 0.24, class: "preview-room-name",
+      "text-anchor": "middle", "dominant-baseline": "middle",
+    });
+    name.textContent = room.name;
+    group.append(name);
+  }
+  return group;
+}
+
+/**
+ * The middle of a room's bounding box, for its name.
+ * @param {number[][]} outline
+ * @returns {number[]}
+ */
+function roomCenter(outline) {
+  const xs = outline.map(([x]) => x);
+  const ys = outline.map(([, y]) => y);
+  return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
 }
 
 /**
@@ -284,13 +350,14 @@ function drawCornerArrows(svg, outline, margin) {
 }
 
 /**
- * Grid lines every 12 in, clipped to the room.
+ * Grid lines every 12 in across the whole suite, clipped to one room.
  *
  * @param {{x: number, y: number, width: number, height: number, margin: number}} box
+ * @param {string} clipId - the room's clipPath id
  * @returns {SVGGElement}
  */
-function drawGrid(box) {
-  const grid = svgElement("g", { class: "preview-grid", "clip-path": "url(#preview-room-clip)" });
+function drawGrid(box, clipId) {
+  const grid = svgElement("g", { class: "preview-grid", "clip-path": `url(#${clipId})` });
   const left = box.x + box.margin;
   const top = box.y + box.margin;
   const right = box.x + box.width - box.margin;

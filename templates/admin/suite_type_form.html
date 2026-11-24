@@ -80,9 +80,39 @@
                             {% endfor %}
                         </select>
                     </div>
+                    <div class="col-sm-6">
+                        <label for="ceiling" class="form-label">Ceiling height, whole suite (in)</label>
+                        <input id="ceiling" name="ceiling" type="number" class="form-control" min="72" max="240" step="1"
+                               inputmode="numeric" value="102">
+                    </div>
                 </div>
 
-                <h2 class="h5">Shape</h2>
+                {# Rooms (U3): main.js keeps every room's values and shows the selected
+                   room's in the editor below. The room fields have no meaning to the
+                   server; it reads the whole suite from the hidden "geometry" field. #}
+                <h2 class="h5">Rooms</h2>
+                <p class="small text-body-secondary mb-2">
+                    A suite is one or more rooms: bedrooms and, often, a common room. Pick a room to edit it,
+                    or click it in the preview.
+                </p>
+                <div class="d-flex flex-wrap gap-2 mb-3" id="room-tabs" role="group" aria-label="Rooms in this suite"></div>
+
+                <div class="room-editor mb-4">
+                <div class="row g-3 mb-3">
+                    <div class="col-sm-6">
+                        <label for="room-name" class="form-label">Room name</label>
+                        <input id="room-name" name="room_name" class="form-control" maxlength="40" placeholder="e.g. Bedroom A">
+                    </div>
+                    <div class="col-sm-6">
+                        <label for="room-kind" class="form-label">Kind</label>
+                        <select id="room-kind" name="room_kind" class="form-select">
+                            <option value="bedroom">Bedroom</option>
+                            <option value="common">Common room</option>
+                        </select>
+                    </div>
+                </div>
+
+                <h3 class="h6">Shape</h3>
                 <div class="mb-3" role="radiogroup" aria-label="Shape">
                     <div class="form-check form-check-inline">
                         <input class="form-check-input" type="radio" name="shape" id="shape-rectangle" value="rectangle" checked>
@@ -99,12 +129,12 @@
                 <fieldset id="rectangle-fields" class="row g-3 mb-3">
                     <div class="col-sm-6">
                         <label for="width" class="form-label">Width, east to west (in)</label>
-                        <input id="width" name="width" type="number" class="form-control" min="1" max="600" step="1"
+                        <input id="width" name="width" type="number" class="form-control" min="1" max="1200" step="1"
                                inputmode="numeric" value="114">
                     </div>
                     <div class="col-sm-6">
                         <label for="length" class="form-label">Length, north to south (in)</label>
-                        <input id="length" name="length" type="number" class="form-control" min="1" max="600" step="1"
+                        <input id="length" name="length" type="number" class="form-control" min="1" max="1200" step="1"
                                inputmode="numeric" value="150">
                     </div>
                 </fieldset>
@@ -129,15 +159,41 @@
                     <button type="button" class="btn btn-sm btn-outline-secondary" data-action="add-wall">Add wall</button>
                 </fieldset>
 
-                <div class="row g-3 mb-4">
+                <h3 class="h6">Where this room is in the suite</h3>
+                <p class="small text-body-secondary mb-2">
+                    The room's north-west corner, measured from the suite's west and north sides.
+                    Leave a gap the thickness of the wall between rooms (about 5 in).
+                </p>
+                <div class="row g-3 mb-2">
                     <div class="col-sm-6">
-                        <label for="ceiling" class="form-label">Ceiling height (in)</label>
-                        <input id="ceiling" name="ceiling" type="number" class="form-control" min="72" max="240" step="1"
-                               inputmode="numeric" value="102">
+                        <label for="room-x" class="form-label">From the west side (in)</label>
+                        <input id="room-x" name="room_x" type="number" class="form-control" min="0" max="1200" step="1" inputmode="numeric">
+                    </div>
+                    <div class="col-sm-6">
+                        <label for="room-y" class="form-label">From the north side (in)</label>
+                        <input id="room-y" name="room_y" type="number" class="form-control" min="0" max="1200" step="1" inputmode="numeric">
                     </div>
                 </div>
+                <div class="d-flex flex-wrap align-items-end gap-2 mb-3" id="place-next-to">
+                    <div>
+                        <label for="place-side" class="form-label small mb-0">Place this room</label>
+                        <select id="place-side" class="form-select form-select-sm">
+                            <option value="east">east of</option>
+                            <option value="south">south of</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="place-room" class="form-label small mb-0">room</label>
+                        <select id="place-room" class="form-select form-select-sm"></select>
+                    </div>
+                    <div>
+                        <label for="place-gap" class="form-label small mb-0">wall between (in)</label>
+                        <input id="place-gap" type="number" class="form-control form-control-sm place-gap" min="0" max="24" value="5">
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-action="place-room">Place</button>
+                </div>
 
-                <h2 class="h5">Doors, windows and more</h2>
+                <h3 class="h6">Doors, windows and more in this room</h3>
                 <p class="small text-body-secondary mb-2">
                     Measure each distance along the wall from its <strong>left corner</strong> as you
                     stand inside the room facing that wall (the red arrows in the preview) to the
@@ -160,7 +216,11 @@
                         {# main.js appends one <tbody> per feature, from #feature-template. #}
                     </table>
                 </div>
-                <button type="button" class="btn btn-sm btn-outline-secondary mb-4" data-action="add-feature">Add feature</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-action="add-feature">Add feature</button>
+                <div class="border-top mt-3 pt-3">
+                    <button type="button" class="btn btn-sm btn-outline-danger" data-action="remove-room">Remove this room</button>
+                </div>
+                </div>{# .room-editor #}
 
                 <h2 class="h5">Measurement</h2>
                 <div class="row g-3 mb-3">

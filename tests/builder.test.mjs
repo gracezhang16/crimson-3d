@@ -7,9 +7,13 @@ import { readFileSync } from "node:fs";
 
 import {
   buildGeometry,
+  buildSuite,
   featureFromValues,
   featureProblems,
   geometryToForm,
+  newRoom,
+  parseRoom,
+  positionNextTo,
   outlineFromWalls,
   parseInches,
   rectangleOutline,
@@ -53,7 +57,7 @@ test("buildGeometry makes the SPEC.md 4.2 format for a rectangle", () => {
 });
 
 test("rectangle sizes and ceiling are checked", () => {
-  const { geometry, errors } = buildGeometry({ shape: "rectangle", width: NaN, length: 601, ceiling: 50 });
+  const { geometry, errors } = buildGeometry({ shape: "rectangle", width: NaN, length: 1201, ceiling: 50 });
   assert.equal(geometry, null);
   assert.equal(errors.length, 3);
   assert.match(errors[0], /Width/);
@@ -121,20 +125,20 @@ test("bad rows are named by wall letter and stop the outline", () => {
   assert.equal(outline, null);
   assert.deepEqual(errors, [
     "Wall B: Pick a direction.",
-    "Wall C: Length must be a whole number from 1 to 600 in.",
+    "Wall C: Length must be a whole number from 1 to 1200 in.",
   ]);
 });
 
 test("wallProblem", () => {
   assert.equal(wallProblem(wall("north", 1)), null);
-  assert.equal(wallProblem(wall("north", 600)), null);
-  assert.match(wallProblem(wall("north", 0)), /1 to 600/);
-  assert.match(wallProblem(wall("north", 601)), /1 to 600/);
+  assert.equal(wallProblem(wall("north", 1200)), null);
+  assert.match(wallProblem(wall("north", 0)), /1 to 1200/);
+  assert.match(wallProblem(wall("north", 1201)), /1 to 1200/);
 });
 
-test("a room bigger than 600 in is rejected", () => {
-  const { errors } = outlineFromWalls(rectangleWalls(610, 100));
-  assert.ok(errors.some((e) => /1 to 600/.test(e)));
+test("a room bigger than 1200 in is rejected", () => {
+  const { errors } = outlineFromWalls(rectangleWalls(1210, 100));
+  assert.ok(errors.some((e) => /1 to 1200/.test(e)));
 });
 
 test("buildGeometry uses the walls in walls mode", () => {
@@ -270,34 +274,104 @@ const oneRoom = (ceiling, outline, features = []) => ({
   version: 2, units: "in", ceiling, rooms: [{ name: "Main room", kind: "bedroom", outline, features }],
 });
 
-test("a suite with several rooms can't be edited in the form yet (U3)", () => {
+test("a saved two-room suite opens as two rooms with their positions", () => {
   const two = oneRoom(96, rectangleOutline(100, 100));
   two.rooms.push({ name: "Common room", kind: "common", outline: [[105, 0], [200, 0], [200, 100], [105, 100]], features: [] });
-  assert.equal(geometryToForm(two), null);
+  const form = geometryToForm(two);
+  assert.deepEqual(form.rooms.map((r) => [r.name, r.kind, r.x, r.y, r.width, r.length]),
+    [["Main room", "bedroom", "0", "0", "100", "100"], ["Common room", "common", "105", "0", "95", "100"]]);
 });
 
 test("a saved rectangle opens in Rectangle mode", () => {
   const door = { kind: "door", wall: 2, offset: 10, width: 34, height: 80 };
   const form = geometryToForm(oneRoom(102, rectangleOutline(114, 150), [door]));
-  assert.equal(form.shape, "rectangle");
-  assert.equal(form.width, 114);
-  assert.equal(form.length, 150);
-  assert.deepEqual(form.features, [door]);
+  assert.equal(form.ceiling, "102");
+  const [room] = form.rooms;
+  assert.deepEqual([room.shape, room.width, room.length, room.x, room.y], ["rectangle", "114", "150", "0", "0"]);
+  assert.deepEqual(room.features, [{ kind: "door", wall: "2", offset: "10", width: "34", height: "80", sill: "", depth: "" }]);
 });
 
 test("a saved L-shape opens as walked walls that rebuild the same outline", () => {
-  const form = geometryToForm(oneRoom(96, L_OUTLINE));
-  assert.equal(form.shape, "walls");
-  assert.deepEqual(form.walls, L_WALLS);
-  assert.deepEqual(outlineFromWalls(form.walls).outline, L_OUTLINE);   // round trip
+  const [room] = geometryToForm(oneRoom(96, L_OUTLINE)).rooms;
+  assert.equal(room.shape, "walls");
+  const walls = room.walls.map((w) => ({ direction: w.direction, length: Number(w.length) }));
+  assert.deepEqual(walls, L_WALLS);
+  assert.deepEqual(outlineFromWalls(walls).outline, L_OUTLINE);   // round trip
 });
 
 test("a rectangle not starting at the north-west corner opens as walls", () => {
-  const form = geometryToForm(oneRoom(96, [[114, 0], [114, 150], [0, 150], [0, 0]]));
-  assert.equal(form.shape, "walls");
-  assert.deepEqual(form.walls.map((w) => w.direction), ["south", "west", "north", "east"]);
+  const [room] = geometryToForm(oneRoom(96, [[114, 0], [114, 150], [0, 150], [0, 0]])).rooms;
+  assert.equal(room.shape, "walls");
+  assert.deepEqual(room.walls.map((w) => w.direction), ["south", "west", "north", "east"]);
 });
 
 test("a room with an angled wall can't be shown in the form", () => {
   assert.equal(geometryToForm(oneRoom(96, [[0, 0], [100, 0], [0, 100]])), null);
+});
+
+
+// --- Suites (U3) -------------------------------------------------------------------
+
+const BEDROOM_A = { ...newRoom("Bedroom A"), width: "120", length: "144" };
+const COMMON_ROOM = { ...newRoom("Common room", "common", { x: 125, y: 0 }), width: "180", length: "293" };
+
+test("buildSuite moves each room to its position", () => {
+  const { geometry, errors } = buildSuite({ ceiling: 102, rooms: [BEDROOM_A, COMMON_ROOM].map(parseRoom) });
+  assert.deepEqual(errors, []);
+  assert.equal(geometry.version, 2);
+  assert.deepEqual(geometry.rooms.map((r) => [r.name, r.kind]), [["Bedroom A", "bedroom"], ["Common room", "common"]]);
+  assert.deepEqual(geometry.rooms[1].outline, [[125, 0], [305, 0], [305, 293], [125, 293]]);
+});
+
+test("in a suite with several rooms, problems name the room", () => {
+  const badWindow = { kind: "window", wall: "0", offset: "0", width: "200", height: "50", sill: "30", depth: "" };
+  const rooms = [BEDROOM_A, { ...COMMON_ROOM, features: [badWindow] }].map(parseRoom);
+  const { errors, rooms: views } = buildSuite({ ceiling: 102, rooms });
+  assert.deepEqual(errors, ["Common room: Window 1 is wider than wall A (200 in on a 180 in wall)."]);
+  assert.deepEqual(views[1].featureErrors, [["Window 1 is wider than wall A (200 in on a 180 in wall)."]]);
+});
+
+test("room names, kinds and positions are checked", () => {
+  const rooms = [
+    { ...BEDROOM_A, name: "  " },
+    { ...COMMON_ROOM, kind: "kitchen", x: "-5" },
+  ].map(parseRoom);
+  const { errors, geometry } = buildSuite({ ceiling: 102, rooms });
+  assert.deepEqual(errors, [
+    "Room 1: Give the room a name of 1 to 40 characters.",
+    "Common room: Room kind must be bedroom or common.",
+    "Common room: Position must be whole numbers from 0 to 1200 in.",
+  ]);
+  assert.ok(geometry, "still drawn in the preview");
+});
+
+test("a room pushed past 1200 in is rejected", () => {
+  const far = parseRoom({ ...COMMON_ROOM, x: "1100" });
+  assert.ok(buildSuite({ ceiling: 102, rooms: [far] }).errors[0].includes("fit within 1200"));
+});
+
+test("a suite needs 1 to 8 rooms", () => {
+  assert.deepEqual(buildSuite({ ceiling: 102, rooms: [] }).errors, ["A suite needs 1 to 8 rooms."]);
+});
+
+test("positionNextTo leaves a wall's gap east or south of a room", () => {
+  const bedroom = rectangleOutline(120, 144);
+  assert.deepEqual(positionNextTo(bedroom, "east", 5), { x: 125, y: 0 });
+  assert.deepEqual(positionNextTo(bedroom, "south", 5), { x: 0, y: 149 });
+  assert.deepEqual(positionNextTo([[125, 0], [305, 0], [305, 293], [125, 293]], "south", 0), { x: 125, y: 293 });
+});
+
+test("parseRoom turns typed text into numbers and features", () => {
+  const raw = { ...newRoom("Bedroom"), width: "12a", features: [{ kind: "outlet", wall: "1", offset: "20", width: "", height: "", sill: "", depth: "" }] };
+  const room = parseRoom(raw);
+  assert.ok(Number.isNaN(room.width));
+  assert.deepEqual(room.features, [{ kind: "outlet", wall: 1, offset: 20 }]);
+});
+
+test("the sample suite survives a round trip through the form", () => {
+  const sample = JSON.parse(readFileSync(new URL("../seed/suites/demo-hall-two-bedroom-suite.json", import.meta.url), "utf8")).geometry;
+  const form = geometryToForm(sample);
+  const { geometry, errors } = buildSuite({ ceiling: Number(form.ceiling), rooms: form.rooms.map(parseRoom) });
+  assert.deepEqual(errors, []);
+  assert.deepEqual(geometry, sample);
 });

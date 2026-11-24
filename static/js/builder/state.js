@@ -26,13 +26,16 @@ export const DIRECTIONS = {
 };
 
 // Limits from SPEC.md 4.2.
-const MAX_COORDINATE = 600;
+const MAX_COORDINATE = 1200;   // SPEC.md 4.2: suite coordinates run 0 to 1200 in
 const MIN_CEILING = 72;
 const MAX_CEILING = 240;
 const MIN_WALLS = 4; // at right angles, a closed room needs at least four walls
 const MAX_WALLS = 12;
 const MAX_FEATURES = 40;
-const SINGLE_ROOM_NAME = "Main room"; // the one room, until the builder handles several (U3)
+const SINGLE_ROOM_NAME = "Main room"; // buildGeometry()'s one room
+const MAX_ROOMS = 8;
+const MAX_ROOM_NAME = 40;
+export const ROOM_KINDS = ["bedroom", "common"];
 const EPSILON = 1e-9; // as in geometry.py: diagonal wall lengths aren't whole numbers
 
 export const FEATURE_KINDS = ["door", "window", "closet", "radiator", "outlet"];
@@ -329,91 +332,233 @@ function validateHeights(feature, name, ceiling) {
   return [];
 }
 
+// ---------------------------------------------------------------------------
+// Suites (U3): each room's form values -> the suite format (version 2)
+// ---------------------------------------------------------------------------
+
 /**
- * Build the room-format object from the form's values.
+ * A new room's form values. Everything is kept as the text typed in the
+ * form (so switching rooms never loses what was typed); parseRoom() turns
+ * it into numbers.
+ *
+ * @param {string} name
+ * @param {string} [kind]
+ * @param {{x: number, y: number}} [position] - its north-west corner in the suite
+ * @returns {object}
+ */
+export function newRoom(name, kind = "bedroom", position = { x: 0, y: 0 }) {
+  return {
+    name, kind, shape: "rectangle", width: "120", length: "144",
+    x: String(position.x), y: String(position.y), walls: [], features: [],
+  };
+}
+
+/**
+ * Turn one room's typed values into numbers (NaN where something isn't a
+ * whole number) and feature objects.
+ *
+ * @param {object} raw - from newRoom() or the form
+ * @returns {object}
+ */
+export function parseRoom(raw) {
+  return {
+    name: raw.name,
+    kind: raw.kind,
+    shape: raw.shape,
+    width: parseInches(raw.width),
+    length: parseInches(raw.length),
+    x: parseInches(raw.x),
+    y: parseInches(raw.y),
+    walls: raw.walls.map((wall) => ({ direction: wall.direction, length: parseInches(wall.length) })),
+    features: raw.features.map((feature) => featureFromValues({
+      kind: feature.kind,
+      wall: feature.wall === "" ? NaN : Number(feature.wall),
+      offset: parseInches(feature.offset),
+      width: parseInches(feature.width),
+      height: parseInches(feature.height),
+      sill: parseInches(feature.sill),
+      depth: parseInches(feature.depth),
+    })),
+  };
+}
+
+/**
+ * A room's outline from its shape, with its north-west corner at (0, 0).
+ *
+ * @param {{shape: string, width: number, length: number, walls: object[]}} room - parsed
+ * @returns {{outline: number[][] | null, errors: string[], openEnd: number[] | null}}
+ */
+function roomOutline({ shape, width, length, walls }) {
+  if (shape === "walls") {
+    return outlineFromWalls(walls);
+  }
+  const errors = [];
+  const widthOk = isWholeBetween(width, 1, MAX_COORDINATE);
+  const lengthOk = isWholeBetween(length, 1, MAX_COORDINATE);
+  if (!widthOk) errors.push(`Width must be a whole number from 1 to ${MAX_COORDINATE} in.`);
+  if (!lengthOk) errors.push(`Length must be a whole number from 1 to ${MAX_COORDINATE} in.`);
+  return { outline: widthOk && lengthOk ? rectangleOutline(width, length) : null, errors, openEnd: null };
+}
+
+/**
+ * Build the suite format (version 2) from every room's parsed values.
+ *
+ * Each room's outline is built from its shape, then moved so its north-west
+ * corner is at the room's position (x, y). Problems are checked the same way
+ * as on the server (geometry.validate_suite), except overlap between rooms,
+ * which only the server checks (the preview shows it plainly). When the
+ * suite has several rooms, problems start with the room's name.
+ *
+ * @param {{ceiling: number, rooms: object[]}} suite - rooms from parseRoom()
+ * @returns {{geometry: object | null, errors: string[], rooms: {name: string,
+ *   outline: number[][] | null, openEnd: number[] | null, features: object[],
+ *   featureErrors: string[][]}[]}}
+ *   geometry is null until every room has an outline to draw. Only save it
+ *   when errors is empty. rooms[i] is what the preview draws for room i.
+ */
+export function buildSuite({ ceiling, rooms }) {
+  const errors = [];
+  if (rooms.length < 1 || rooms.length > MAX_ROOMS) {
+    errors.push(`A suite needs 1 to ${MAX_ROOMS} rooms.`);
+  }
+  const ceilingOk = isWholeBetween(ceiling, MIN_CEILING, MAX_CEILING);
+  const prefix = (label) => (rooms.length > 1 ? `${label}: ` : "");
+
+  const built = rooms.map((room, i) => {
+    const label = room.name?.trim() || `Room ${i + 1}`;
+    const roomErrors = [];
+    if (!room.name || !room.name.trim() || room.name.trim().length > MAX_ROOM_NAME) {
+      roomErrors.push(`Give the room a name of 1 to ${MAX_ROOM_NAME} characters.`);
+    }
+    if (!ROOM_KINDS.includes(room.kind)) {
+      roomErrors.push("Room kind must be bedroom or common.");
+    }
+    const positionOk = isWholeBetween(room.x, 0, MAX_COORDINATE) && isWholeBetween(room.y, 0, MAX_COORDINATE);
+    if (!positionOk) {
+      roomErrors.push(`Position must be whole numbers from 0 to ${MAX_COORDINATE} in.`);
+    }
+    const shape = roomOutline(room);
+    roomErrors.push(...shape.errors);
+
+    // Move the room to its place in the suite.
+    const dx = positionOk ? room.x : 0;
+    const dy = positionOk ? room.y : 0;
+    const outline = shape.outline && shape.outline.map(([x, y]) => [x + dx, y + dy]);
+    const openEnd = shape.openEnd && [shape.openEnd[0] + dx, shape.openEnd[1] + dy];
+    if (outline && outline.some(([x, y]) => x > MAX_COORDINATE || y > MAX_COORDINATE)) {
+      roomErrors.push(`The room must fit within ${MAX_COORDINATE} × ${MAX_COORDINATE} in.`);
+    }
+
+    // As on the server, features are only checked against a good outline,
+    // and against the highest ceiling while the ceiling itself is invalid.
+    let featureErrors = room.features.map(() => []);
+    let general = [];
+    if (outline && roomErrors.length === 0) {
+      const checked = featureProblems(outline, room.features, ceilingOk ? ceiling : MAX_CEILING);
+      featureErrors = checked.perFeature;
+      general = checked.general;
+    }
+    return {
+      label, roomErrors, general, featureErrors,
+      view: { name: label, outline, openEnd, features: room.features, featureErrors },
+      room: outline && { name: room.name.trim(), kind: room.kind, outline, features: room.features },
+    };
+  });
+
+  for (const room of built) errors.push(...room.roomErrors.map((e) => prefix(room.label) + e));
+  if (!ceilingOk) {
+    errors.push(`Ceiling must be a whole number from ${MIN_CEILING} to ${MAX_CEILING} in.`);
+  }
+  for (const room of built) {
+    errors.push(...[...room.general, ...room.featureErrors.flat()].map((e) => prefix(room.label) + e));
+  }
+
+  const complete = built.length > 0 && built.every((room) => room.room);
+  const geometry = complete
+    ? { version: 2, units: "in", ceiling, rooms: built.map((room) => room.room) }
+    : null;
+  return { geometry, errors, rooms: built.map((room) => room.view) };
+}
+
+/**
+ * Build a one-room suite from one room's values (no name, kind or position
+ * needed): the room is a bedroom called "Main room" at (0, 0).
  *
  * @param {{shape: "rectangle" | "walls", width: number, length: number,
  *   walls: {direction: string, length: number}[], ceiling: number,
  *   features?: object[]}} values - features as made by featureFromValues()
  * @returns {{geometry: object | null, errors: string[], openEnd: number[] | null,
  *   featureErrors: string[][]}}
- *   geometry is null when there is no outline to draw. Only save it when
- *   errors is empty. openEnd: see outlineFromWalls(). featureErrors[i] lists
- *   feature i's problems (empty until the outline itself is valid).
  */
-export function buildGeometry({ shape, width, length, walls, ceiling, features = [] }) {
-  const errors = [];
-  let outline = null;
-  let openEnd = null;
+export function buildGeometry({ ceiling, features = [], ...shape }) {
+  const room = { ...shape, name: SINGLE_ROOM_NAME, kind: "bedroom", x: 0, y: 0, features };
+  const { geometry, errors, rooms } = buildSuite({ ceiling, rooms: [room] });
+  return { geometry, errors, openEnd: rooms[0].openEnd, featureErrors: rooms[0].featureErrors };
+}
 
-  if (shape === "walls") {
-    const result = outlineFromWalls(walls);
-    outline = result.outline;
-    openEnd = result.openEnd;
-    errors.push(...result.errors);
-  } else {
-    const widthOk = isWholeBetween(width, 1, MAX_COORDINATE);
-    const lengthOk = isWholeBetween(length, 1, MAX_COORDINATE);
-    if (!widthOk) errors.push(`Width must be a whole number from 1 to ${MAX_COORDINATE} in.`);
-    if (!lengthOk) errors.push(`Length must be a whole number from 1 to ${MAX_COORDINATE} in.`);
-    if (widthOk && lengthOk) outline = rectangleOutline(width, length);
-  }
-
-  const outlineOk = outline !== null && errors.length === 0;
-  const ceilingOk = isWholeBetween(ceiling, MIN_CEILING, MAX_CEILING);
-  if (!ceilingOk) {
-    errors.push(`Ceiling must be a whole number from ${MIN_CEILING} to ${MAX_CEILING} in.`);
-  }
-
-  // As on the server, features are only checked against a good outline, and
-  // against the highest allowed ceiling while the ceiling itself is invalid.
-  let featureErrors = features.map(() => []);
-  if (outlineOk) {
-    const result = featureProblems(outline, features, ceilingOk ? ceiling : MAX_CEILING);
-    featureErrors = result.perFeature;
-    errors.push(...result.general, ...result.perFeature.flat());
-  }
-
-  // A suite (format version 2) with one room. U3 adds more rooms.
-  const geometry = outline && {
-    version: 2, units: "in", ceiling,
-    rooms: [{ name: SINGLE_ROOM_NAME, kind: "bedroom", outline, features }],
-  };
-  return { geometry, errors, openEnd, featureErrors };
+/**
+ * Where to put a room "east of" or "south of" another, with a wall of
+ * `gap` inches between them: lined up with the other room's north (or west)
+ * side.
+ *
+ * @param {number[][]} otherOutline - the room to place next to
+ * @param {"east" | "south"} side
+ * @param {number} gap - inches of wall between the rooms
+ * @returns {{x: number, y: number}} the new room's north-west corner
+ */
+export function positionNextTo(otherOutline, side, gap) {
+  const xs = otherOutline.map(([x]) => x);
+  const ys = otherOutline.map(([, y]) => y);
+  return side === "south"
+    ? { x: Math.min(...xs), y: Math.max(...ys) + gap }
+    : { x: Math.max(...xs) + gap, y: Math.min(...ys) };
 }
 
 // ---------------------------------------------------------------------------
-// Saved room -> form (A4): used when editing, and when the server sends the
-// form back with errors.
+// Saved suite -> form (A4, U3): used when editing, and when the server sends
+// the form back with errors.
 // ---------------------------------------------------------------------------
 
 /**
- * Turn a room-format object back into the values the form shows.
+ * Turn a saved suite back into form values: the ceiling and each room as
+ * newRoom()-style typed values.
  *
- * A plain rectangle starting at (0, 0) opens in Rectangle mode. Any other
- * outline whose walls all run north, south, east or west opens as walked
- * walls, starting from its first corner. Angled walls can't be shown in
- * either mode, and nor (until U3) can a suite with several rooms, so those
- * return null.
+ * Each room's position is its outline's north-west corner. A plain
+ * rectangle opens in Rectangle mode; any other outline whose walls all run
+ * north, south, east or west opens as walked walls from its first corner.
+ * Angled walls can't be shown in either mode, so then this returns null.
  *
- * @param {{ceiling: number, rooms: {outline: number[][], features: object[]}[]}} geometry
- * @returns {{shape: "rectangle" | "walls", width?: number, length?: number,
- *   walls: {direction: string, length: number}[], ceiling: number,
- *   features: object[]} | null}
+ * @param {{ceiling: number, rooms: {name: string, kind: string,
+ *   outline: number[][], features: object[]}[]}} geometry
+ * @returns {{ceiling: string, rooms: object[]} | null}
  */
 export function geometryToForm(geometry) {
-  if (geometry.rooms.length !== 1) {
-    return null;
-  }
-  const { ceiling } = geometry;
-  const { outline, features } = geometry.rooms[0];
-  const [width, length] = [outline[1]?.[0], outline[2]?.[1]];
-  const isRectangle = outline.length === 4 &&
-    JSON.stringify(outline) === JSON.stringify(rectangleOutline(width, length));
-  if (isRectangle) {
-    return { shape: "rectangle", width, length, walls: rectangleWalls(width, length), ceiling, features };
-  }
+  const rooms = geometry.rooms.map(roomToForm);
+  return rooms.every(Boolean) ? { ceiling: String(geometry.ceiling), rooms } : null;
+}
 
+/**
+ * One saved room -> typed form values, or null if it has an angled wall.
+ * @param {{name: string, kind: string, outline: number[][], features: object[]}} room
+ * @returns {object | null}
+ */
+function roomToForm(room) {
+  const minX = Math.min(...room.outline.map(([x]) => x));
+  const minY = Math.min(...room.outline.map(([, y]) => y));
+  const outline = room.outline.map(([x, y]) => [x - minX, y - minY]);
+  const text = (value) => (value === undefined || Number.isNaN(value) ? "" : String(value));
+  const base = {
+    name: room.name, kind: room.kind, x: String(minX), y: String(minY),
+    features: room.features.map((f) => ({
+      kind: f.kind, wall: text(f.wall), offset: text(f.offset), width: text(f.width),
+      height: text(f.height), sill: text(f.sill), depth: text(f.depth),
+    })),
+  };
+
+  const [width, length] = [outline[1]?.[0], outline[2]?.[1]];
+  if (outline.length === 4 && JSON.stringify(outline) === JSON.stringify(rectangleOutline(width, length))) {
+    return { ...base, shape: "rectangle", width: String(width), length: String(length), walls: [] };
+  }
   const walls = [];
   for (let i = 0; i < outline.length; i++) {
     const [x1, y1] = outline[i];
@@ -423,7 +568,7 @@ export function geometryToForm(geometry) {
       return null; // an angled wall
     }
     const direction = dx > 0 ? "east" : dx < 0 ? "west" : dy > 0 ? "south" : "north";
-    walls.push({ direction, length: Math.abs(dx + dy) });
+    walls.push({ direction, length: String(Math.abs(dx + dy)) });
   }
-  return { shape: "walls", walls, ceiling, features };
+  return { ...base, shape: "walls", width: "120", length: "144", walls };
 }

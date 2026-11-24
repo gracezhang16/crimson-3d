@@ -1,20 +1,21 @@
 /**
- * Room builder page (templates/admin/suite_type_form.html). Hannah.
+ * Suite builder page (templates/admin/suite_type_form.html). Hannah.
  *
- * Form state (shape, walls, features) -> room-format object -> live SVG
- * preview and inline errors, on every keystroke.
- * The pure parts live in state.js (form values -> geometry) and preview.js
- * (geometry -> SVG); this file only reads the form and wires them together.
+ * A suite is one or more rooms. This file keeps every room's typed values
+ * in `rooms`, shows the selected room's values in the editor, and on every
+ * keystroke rebuilds the whole suite (state.js: parseRoom, buildSuite) and
+ * redraws the preview (preview.js: drawSuite). Switching rooms saves the
+ * editor into `rooms` first, so nothing typed is lost.
  *
  * One "input" listener on the whole form catches typing in any field, because
  * input events bubble up from the field to the form ("event delegation").
  */
 
 import { formatFeetInches } from "../shared/units.js";
-import { wallLetter } from "../shared/geometry.js";
-import { drawPreview } from "./preview.js";
+import { signedArea, wallLetter } from "../shared/geometry.js";
+import { drawSuite } from "./preview.js";
 import {
-  buildGeometry, featureFromValues, geometryToForm, parseInches, rectangleWalls, wallProblem,
+  buildSuite, geometryToForm, newRoom, parseInches, parseRoom, positionNextTo, rectangleWalls, wallProblem,
 } from "./state.js";
 
 // Which number boxes each kind of feature uses (SPEC.md 4.2); the rest are
@@ -26,6 +27,8 @@ const FEATURE_FIELDS = {
   radiator: ["width", "height", "depth"],
   outlet: [],
 };
+const MAX_ROOMS = 8;
+const DEFAULT_GAP = 5; // inches of wall between a new room and the one it's placed next to
 
 const form = document.querySelector("#room-type-form");
 const svg = document.querySelector("#preview");
@@ -37,16 +40,13 @@ const rowTemplate = document.querySelector("#wall-row-template");
 const featuresTable = document.querySelector("#features-table");
 const featureTemplate = document.querySelector("#feature-template");
 const saveBlocked = document.querySelector("#save-blocked");
+const roomTabs = document.querySelector("#room-tabs");
+const placeNextTo = document.querySelector("#place-next-to");
+const placeRoom = document.querySelector("#place-room");
 
-/**
- * @returns {{direction: string, length: number}[]} the wall table, row by row
- */
-function readWalls() {
-  return [...wallRows.querySelectorAll(".wall-row")].map((row) => ({
-    direction: row.querySelector(".wall-direction").value,
-    length: parseInches(row.querySelector(".wall-length").value),
-  }));
-}
+let rooms = [newRoom("Bedroom A")]; // every room's typed values (see state.newRoom)
+let selected = 0;                     // the room shown in the editor
+let built = null;                     // the latest buildSuite() result
 
 /**
  * Look up a form field by its name attribute.
@@ -62,19 +62,9 @@ function field(name) {
   return form.elements.namedItem(name);
 }
 
-/**
- * @returns {object} the values buildGeometry() needs, read from the form
- */
-function readForm() {
-  return {
-    shape: field("shape").value,
-    width: parseInches(field("width").value),
-    length: parseInches(field("length").value),
-    walls: readWalls(),
-    ceiling: parseInches(field("ceiling").value),
-    features: readFeatures(),
-  };
-}
+// ---------------------------------------------------------------------------
+// The room editor: its fields <-> one room's typed values
+// ---------------------------------------------------------------------------
 
 /**
  * @returns {HTMLTableSectionElement[]} one <tbody class="feature"> per feature
@@ -83,24 +73,79 @@ function featureBodies() {
   return [...featuresTable.querySelectorAll("tbody.feature")];
 }
 
+/** @returns {object} the selected room's values, read from the editor */
+function readEditor() {
+  return {
+    name: field("room_name").value,
+    kind: field("room_kind").value,
+    shape: field("shape").value,
+    width: field("width").value,
+    length: field("length").value,
+    x: field("room_x").value,
+    y: field("room_y").value,
+    walls: [...wallRows.querySelectorAll(".wall-row")].map((row) => ({
+      direction: row.querySelector(".wall-direction").value,
+      length: row.querySelector(".wall-length").value,
+    })),
+    features: featureBodies().map((body) => {
+      const value = (name) => body.querySelector(`[data-field="${name}"]`).value;
+      return {
+        kind: body.querySelector(".feature-kind").value,
+        wall: body.querySelector(".feature-wall").value,
+        offset: value("offset"), width: value("width"), height: value("height"),
+        sill: value("sill"), depth: value("depth"),
+      };
+    }),
+  };
+}
+
 /**
- * Read the features table into feature objects (see featureFromValues).
- * @returns {object[]}
+ * Show a room's values in the editor.
+ * @param {object} room - typed values
  */
-function readFeatures() {
-  return featureBodies().map((body) => {
-    const number = (name) => parseInches(body.querySelector(`[data-field="${name}"]`).value);
-    const wall = body.querySelector(".feature-wall").value;
-    return featureFromValues({
-      kind: body.querySelector(".feature-kind").value,
-      wall: wall === "" ? NaN : Number(wall),
-      offset: number("offset"),
-      width: number("width"),
-      height: number("height"),
-      sill: number("sill"),
-      depth: number("depth"),
-    });
+function writeEditor(room) {
+  field("room_name").value = room.name;
+  field("room_kind").value = room.kind;
+  field("width").value = room.width;
+  field("length").value = room.length;
+  field("room_x").value = room.x;
+  field("room_y").value = room.y;
+  document.querySelector(`#shape-${room.shape}`).checked = true;
+  showShapeFields(room.shape);
+
+  wallRows.replaceChildren();
+  room.walls.forEach((wall) => addWallRow(wall.direction, wall.length));
+
+  featureBodies().forEach((body) => body.remove());
+  room.features.forEach(() => addFeature());
+  // Build each feature's wall list before choosing its wall.
+  refreshFeatures(wallCount(room), []);
+  featureBodies().forEach((body, i) => {
+    const feature = room.features[i];
+    body.querySelector(".feature-kind").value = feature.kind;
+    body.querySelector(".feature-wall").value = feature.wall;
+    for (const input of body.querySelectorAll("[data-field]")) {
+      input.value = feature[input.dataset.field] ?? "";
+    }
   });
+}
+
+/** @returns {number} how many walls a room has (4 for a rectangle) */
+function wallCount(room) {
+  return room.shape === "walls" ? room.walls.length : 4;
+}
+
+/**
+ * Add a row to the wall table, cloned from the <template>.
+ *
+ * @param {string} direction
+ * @param {number | string} length
+ */
+function addWallRow(direction = "east", length = "") {
+  const row = rowTemplate.content.firstElementChild.cloneNode(true);
+  row.querySelector(".wall-direction").value = direction;
+  row.querySelector(".wall-length").value = length;
+  wallRows.append(row);
 }
 
 /** Add an empty feature row (a door on wall A), cloned from the <template>. */
@@ -109,26 +154,45 @@ function addFeature() {
 }
 
 /**
- * Keep each feature's wall list in step with the shape (A, B, C... for
- * however many walls there are), enable only the boxes its kind uses, and
- * show its problems in red underneath.
+ * Letter the wall rows A, B, C... and mark rows with a bad length in red,
+ * with the reason underneath (Bootstrap's is-invalid + invalid-feedback).
  *
- * @param {number} wallCount
- * @param {string[][]} featureErrors - from buildGeometry()
+ * @param {{direction: string, length: number}[]} walls - parsed
  */
-function refreshFeatures(wallCount, featureErrors) {
+function refreshRows(walls) {
+  wallRows.querySelectorAll(".wall-row").forEach((row, i) => {
+    row.querySelector(".wall-letter").textContent = wallLetter(i);
+    row.querySelector(".wall-direction").setAttribute("aria-label", `Wall ${wallLetter(i)} direction`);
+    const input = row.querySelector(".wall-length");
+    input.setAttribute("aria-label", `Wall ${wallLetter(i)} length in inches`);
+    // An empty box isn't an error yet; the admin may still be typing.
+    const problem = input.value === "" ? null : wallProblem(walls[i]);
+    input.classList.toggle("is-invalid", Boolean(problem));
+    row.querySelector(".invalid-feedback").textContent = problem ?? "";
+  });
+}
+
+/**
+ * Keep each feature's wall list in step with the room's shape (A, B, C...
+ * for however many walls there are), enable only the boxes its kind uses,
+ * and show its problems in red underneath.
+ *
+ * @param {number} walls - how many walls the room has
+ * @param {string[][]} featureErrors - from buildSuite()
+ */
+function refreshFeatures(walls, featureErrors) {
   featureBodies().forEach((body, i) => {
     const select = body.querySelector(".feature-wall");
     const chosen = select.value === "" ? 0 : Number(select.value);
-    const expectedOptions = chosen >= wallCount ? wallCount + 1 : wallCount;
+    const expectedOptions = chosen >= walls ? walls + 1 : walls;
     if (select.options.length !== expectedOptions) {
       select.replaceChildren();
-      for (let wall = 0; wall < wallCount; wall++) {
+      for (let wall = 0; wall < walls; wall++) {
         select.append(new Option(wallLetter(wall), wall));
       }
       // A wall that was deleted from the shape stays selected, so the row
       // shows an error instead of silently moving to another wall.
-      if (chosen >= wallCount) {
+      if (chosen >= walls) {
         select.append(new Option(`${wallLetter(chosen)} (removed)`, chosen));
       }
       select.value = chosen;
@@ -150,47 +214,119 @@ function refreshFeatures(wallCount, featureErrors) {
 }
 
 /**
- * Add a row to the wall table, cloned from the <template>.
+ * Show the Rectangle or Custom shape fields. The inactive fieldset is
+ * disabled as well as hidden, so its fields are neither checked nor submitted.
  *
- * @param {string} direction
- * @param {number | string} length
+ * @param {"rectangle" | "walls"} shape
  */
-function addWallRow(direction = "east", length = "") {
-  const row = rowTemplate.content.firstElementChild.cloneNode(true);
-  row.querySelector(".wall-direction").value = direction;
-  row.querySelector(".wall-length").value = length;
-  wallRows.append(row);
+function showShapeFields(shape) {
+  const custom = shape === "walls";
+  rectangleFields.hidden = rectangleFields.disabled = custom;
+  wallFields.hidden = wallFields.disabled = !custom;
 }
 
-/**
- * Letter the rows A, B, C... and mark rows with a bad length in red, with
- * the reason underneath (Bootstrap's is-invalid + invalid-feedback).
- *
- * @param {{direction: string, length: number}[]} walls
- */
-function refreshRows(walls) {
-  wallRows.querySelectorAll(".wall-row").forEach((row, i) => {
-    row.querySelector(".wall-letter").textContent = wallLetter(i);
-    row.querySelector(".wall-direction").setAttribute("aria-label", `Wall ${wallLetter(i)} direction`);
-    const input = row.querySelector(".wall-length");
-    input.setAttribute("aria-label", `Wall ${wallLetter(i)} length in inches`);
-    // An empty box isn't an error yet; the admin may still be typing.
-    const problem = input.value === "" ? null : wallProblem(walls[i]);
-    input.classList.toggle("is-invalid", Boolean(problem));
-    row.querySelector(".invalid-feedback").textContent = problem ?? "";
+// ---------------------------------------------------------------------------
+// Rooms: tabs, adding, removing, placing
+// ---------------------------------------------------------------------------
+
+/** Redraw the room tabs and the "place next to" list. */
+function renderTabs() {
+  const buttons = rooms.map((room, i) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `btn btn-sm ${i === selected ? "btn-crimson" : "btn-outline-secondary"}`;
+    button.dataset.action = "select-room";
+    button.dataset.room = i;
+    button.setAttribute("aria-pressed", String(i === selected));
+    button.textContent = room.name.trim() || `Room ${i + 1}`;
+    return button;
   });
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "btn btn-sm btn-outline-secondary";
+  add.dataset.action = "add-room";
+  add.textContent = "+ Add room";
+  add.disabled = rooms.length >= MAX_ROOMS;
+  roomTabs.replaceChildren(...buttons, add);
+
+  form.querySelector('[data-action="remove-room"]').disabled = rooms.length === 1;
+  placeNextTo.hidden = rooms.length === 1;
+  placeRoom.replaceChildren(...rooms
+    .map((room, i) => [room, i])
+    .filter(([, i]) => i !== selected)
+    .map(([room, i]) => new Option(room.name.trim() || `Room ${i + 1}`, i)));
 }
 
 /**
- * Show either the summary ("9′ 6″ × 12′ 6″ overall · 4 walls") or the list
- * of problems under the preview.
+ * Show room i in the editor (saving the current room first).
+ * @param {number} i
+ */
+function selectRoom(i) {
+  rooms[selected] = readEditor();
+  selected = i;
+  writeEditor(rooms[selected]);
+  renderTabs();
+  update();
+}
+
+/** Add a room east of the current one: a common room if there's none yet, else a bedroom. */
+function addRoom() {
+  rooms[selected] = readEditor();
+  const anchor = built?.rooms[selected]?.outline;
+  const position = anchor ? positionNextTo(anchor, "east", DEFAULT_GAP) : { x: 0, y: 0 };
+  const hasCommon = rooms.some((room) => room.kind === "common");
+  const bedrooms = rooms.filter((room) => room.kind === "bedroom").length;
+  const name = hasCommon ? `Bedroom ${String.fromCharCode(65 + bedrooms)}` : "Common room";
+  rooms.push(newRoom(name, hasCommon ? "bedroom" : "common", position));
+  selected = rooms.length - 1;
+  writeEditor(rooms[selected]);
+  renderTabs();
+  update();
+  field("room_name").focus();
+}
+
+/** Remove the room being edited, after asking. */
+function removeRoom() {
+  const name = field("room_name").value.trim() || `Room ${selected + 1}`;
+  if (rooms.length === 1 || !window.confirm(`Remove ${name} from this suite?`)) {
+    return;
+  }
+  rooms.splice(selected, 1);
+  selected = Math.max(0, selected - 1);
+  writeEditor(rooms[selected]);
+  renderTabs();
+  update();
+}
+
+/** Move the room being edited next to another, with a wall's gap between. */
+function placeNextToRoom() {
+  const other = built?.rooms[Number(placeRoom.value)]?.outline;
+  if (!other) {
+    return; // that room has no shape yet
+  }
+  const gap = parseInches(document.querySelector("#place-gap").value);
+  const side = document.querySelector("#place-side").value;
+  const { x, y } = positionNextTo(other, side, Number.isNaN(gap) ? DEFAULT_GAP : gap);
+  field("room_x").value = x;
+  field("room_y").value = y;
+  update();
+}
+
+// ---------------------------------------------------------------------------
+// Rebuilding the suite and the preview
+// ---------------------------------------------------------------------------
+
+/**
+ * Show either the summary ("3 rooms · 606.2 sq ft in all") or the list of
+ * problems under the preview.
  *
  * @param {object | null} geometry
  * @param {string[]} errors
  */
 function showStatus(geometry, errors) {
   status.replaceChildren();
-  if (errors.length) {
+  status.className = "mt-2 small";
+  if (errors.length || !geometry) {
     const list = document.createElement("ul");
     list.className = "text-danger mb-0 ps-3";
     for (const error of errors) {
@@ -201,47 +337,55 @@ function showStatus(geometry, errors) {
     status.append(list);
     return;
   }
-  const { outline } = geometry.rooms[0];
-  const xs = outline.map(([x]) => x);
-  const ys = outline.map(([, y]) => y);
   status.className = "mt-2 small text-success";
-  status.textContent = `✓ ${formatFeetInches(Math.max(...xs))} × ${formatFeetInches(Math.max(...ys))} overall · ${outline.length} walls`;
+  if (geometry.rooms.length === 1) {
+    const { outline } = geometry.rooms[0];
+    const width = Math.max(...outline.map(([x]) => x)) - Math.min(...outline.map(([x]) => x));
+    const length = Math.max(...outline.map(([, y]) => y)) - Math.min(...outline.map(([, y]) => y));
+    status.textContent = `✓ ${formatFeetInches(width)} × ${formatFeetInches(length)} overall · ${outline.length} walls`;
+    return;
+  }
+  const area = geometry.rooms.reduce((sum, room) => sum + Math.abs(signedArea(room.outline)), 0) / 144;
+  status.textContent = `✓ ${geometry.rooms.length} rooms · ${area.toFixed(1)} sq ft in all`;
 }
 
-/** Rebuild the geometry from the form and redraw everything. */
+/** Rebuild the suite from every room and redraw everything. */
 function update() {
-  const values = readForm();
-  const { geometry, errors, openEnd, featureErrors } = buildGeometry(values);
-  if (values.shape === "walls") {
-    refreshRows(values.walls);
+  rooms[selected] = readEditor();
+  built = buildSuite({ ceiling: parseInches(field("ceiling").value), rooms: rooms.map(parseRoom) });
+  const current = parseRoom(rooms[selected]);
+  if (current.shape === "walls") {
+    refreshRows(current.walls);
   }
-  const wallCount = values.shape === "walls" ? values.walls.length : 4;
-  refreshFeatures(wallCount, featureErrors);
-  status.className = "mt-2 small";
-  showStatus(geometry, errors);
-  // The preview draws one room (its outline and features). U3 draws whole suites.
-  drawPreview(svg, geometry && geometry.rooms[0], openEnd, featureErrors);
-  // Only a complete, valid room goes into the hidden field the server reads (A4).
-  field("geometry").value = errors.length ? "" : JSON.stringify(geometry);
+  refreshFeatures(wallCount(rooms[selected]), built.rooms[selected].featureErrors);
+  const tab = roomTabs.querySelector(`[data-room="${selected}"]`);
+  if (tab) tab.textContent = rooms[selected].name.trim() || `Room ${selected + 1}`;
+  showStatus(built.geometry, built.errors);
+  drawSuite(svg, built.rooms, selected);
+  // Only a complete, valid suite goes into the hidden field the server reads.
+  field("geometry").value = built.errors.length || !built.geometry ? "" : JSON.stringify(built.geometry);
 }
 
 /**
- * Switch between Rectangle and Custom shape. A custom shape starts from the
- * current rectangle's four walls, so the admin only edits what differs.
+ * Switch the selected room between Rectangle and Custom shape. A custom
+ * shape starts from the current rectangle's four walls, so the admin only
+ * edits what differs.
  *
  * @param {"rectangle" | "walls"} shape
  */
 function setShape(shape) {
-  const custom = shape === "walls";
-  rectangleFields.hidden = rectangleFields.disabled = custom;
-  wallFields.hidden = wallFields.disabled = !custom;
-  if (custom && !wallRows.children.length) {
+  showShapeFields(shape);
+  if (shape === "walls" && !wallRows.children.length) {
     const width = parseInches(field("width").value) || 120;
     const length = parseInches(field("length").value) || 120;
     rectangleWalls(width, length).forEach((wall) => addWallRow(wall.direction, wall.length));
   }
   update();
 }
+
+// ---------------------------------------------------------------------------
+// Events
+// ---------------------------------------------------------------------------
 
 form.addEventListener("input", update);
 form.addEventListener("change", (event) => {
@@ -251,23 +395,48 @@ form.addEventListener("change", (event) => {
 });
 form.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]");
-  if (button?.dataset.action === "add-wall") {
-    addWallRow();
-    wallRows.lastElementChild.querySelector(".wall-length").focus();
-    update();
-  } else if (button?.dataset.action === "remove-wall") {
-    button.closest("tr").remove();
-    update();
-  } else if (button?.dataset.action === "add-feature") {
-    addFeature();
-    update(); // fills in the new row's wall list before focusing it
-    featureBodies().at(-1).querySelector('[data-field="offset"]').focus();
-  } else if (button?.dataset.action === "remove-feature") {
-    button.closest("tbody").remove();
-    update();
+  switch (button?.dataset.action) {
+    case "select-room":
+      selectRoom(Number(button.dataset.room));
+      break;
+    case "add-room":
+      addRoom();
+      break;
+    case "remove-room":
+      removeRoom();
+      break;
+    case "place-room":
+      placeNextToRoom();
+      break;
+    case "add-wall":
+      addWallRow();
+      wallRows.lastElementChild.querySelector(".wall-length").focus();
+      update();
+      break;
+    case "remove-wall":
+      button.closest("tr").remove();
+      update();
+      break;
+    case "add-feature":
+      addFeature();
+      update(); // fills in the new row's wall list before focusing it
+      featureBodies().at(-1).querySelector('[data-field="offset"]').focus();
+      break;
+    case "remove-feature":
+      button.closest("tbody").remove();
+      update();
+      break;
+    default:
   }
 });
-// Only submit a room the preview accepts; the server checks it again anyway.
+// Clicking a room in the preview edits it.
+svg.addEventListener("click", (event) => {
+  const room = event.target.closest("[data-room]");
+  if (room && Number(room.dataset.room) !== selected) {
+    selectRoom(Number(room.dataset.room));
+  }
+});
+// Only submit a suite the preview accepts; the server checks it again anyway.
 form.addEventListener("submit", (event) => {
   update();
   const blocked = field("geometry").value === "";
@@ -277,47 +446,24 @@ form.addEventListener("submit", (event) => {
   }
 });
 
-/**
- * Fill the shape, ceiling and features from a saved room (editing, or the
- * server sending the form back with errors).
- *
- * @param {object} geometry - the room format
- * @returns {boolean} false if the room can't be shown in the form
- */
-function loadGeometry(geometry) {
-  const saved = geometryToForm(geometry);
-  if (!saved) {
-    return false;
-  }
-  field("ceiling").value = saved.ceiling;
-  if (saved.shape === "rectangle") {
-    field("width").value = saved.width;
-    field("length").value = saved.length;
+// ---------------------------------------------------------------------------
+// Start: a saved suite (editing, or the server sending the form back), or one new room
+// ---------------------------------------------------------------------------
+
+if (form.dataset.geometry) {
+  const saved = geometryToForm(JSON.parse(form.dataset.geometry));
+  if (saved) {
+    rooms = saved.rooms;
+    field("ceiling").value = saved.ceiling;
   } else {
-    saved.walls.forEach((wall) => addWallRow(wall.direction, wall.length));
+    // The form would fall back to a default room, and saving that would
+    // overwrite the real shape. So saving is switched off for this suite.
+    form.querySelector('button[type="submit"]').disabled = true;
+    saveBlocked.textContent = "This suite has a room with angled walls, which the builder can't edit yet, "
+      + "so saving is turned off to keep its shape safe.";
+    saveBlocked.hidden = false;
   }
-  document.querySelector(`#shape-${saved.shape}`).checked = true;
-
-  saved.features.forEach(addFeature);
-  // Build each feature's wall list before choosing its wall.
-  refreshFeatures(saved.walls.length, []);
-  featureBodies().forEach((body, i) => {
-    const feature = saved.features[i];
-    body.querySelector(".feature-kind").value = feature.kind;
-    body.querySelector(".feature-wall").value = feature.wall;
-    for (const input of body.querySelectorAll("[data-field]")) {
-      input.value = feature[input.dataset.field] ?? "";
-    }
-  });
-  return true;
 }
-
-if (form.dataset.geometry && !loadGeometry(JSON.parse(form.dataset.geometry))) {
-  // The form would fall back to a default rectangle, and saving that would
-  // overwrite the real shape. So saving is switched off for this room.
-  form.querySelector('button[type="submit"]').disabled = true;
-  saveBlocked.textContent = "This suite has angled walls or several rooms, which the builder "
-    + "can't edit yet, so saving is turned off to keep its shape safe.";
-  saveBlocked.hidden = false;
-}
-setShape(field("shape").value);
+writeEditor(rooms[selected]);
+renderTabs();
+update();

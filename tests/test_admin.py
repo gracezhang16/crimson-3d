@@ -100,6 +100,10 @@ def test_builder_form_has_every_field_with_a_label(client):
     assert 'value="rectangle" checked' in page and 'value="walls"' in page
     assert '<template id="wall-row-template">' in page
     assert 'id="features-table"' in page and '<template id="feature-template">' in page
+    # Suites (U3): room tabs, the selected room's name, kind and position.
+    for field in ("room-tabs", "room-name", "room-kind", "room-x", "room-y", "place-room"):
+        assert f'id="{field}"' in page, field
+    assert 'data-action="remove-room"' in page
     assert 'data-action="add-feature"' in page
     assert "/static/js/builder/main.js" in page
 
