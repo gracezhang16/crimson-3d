@@ -1,7 +1,7 @@
 """Tests for geometry.py. The wall-helper tests mirror tests/geometry.test.mjs.
 
 Validation tests: valid rooms pass, and each rule in SPEC.md 4.2 has at
-least one failing case.
+least one failing case. The same for placements (SPEC.md 4.4 and 7.2).
 """
 
 import copy
@@ -15,6 +15,7 @@ from geometry import (
     inward_normal,
     point_along_wall,
     signed_area,
+    validate_placements,
     validate_room,
     wall_length,
     wall_letter,
@@ -303,3 +304,99 @@ def test_window_sill_plus_height_at_most_ceiling():
 def test_radiator_depth_must_be_positive():
     radiator = {"kind": "radiator", "wall": 0, "offset": 0, "width": 30, "depth": 0}
     assert_one_error(room_with_feature(radiator), "depth")
+
+
+# ---------------------------------------------------------------------------
+# validate_placements (SPEC.md 4.4, 7.2)
+# ---------------------------------------------------------------------------
+
+PLACEMENT_ROOM = {"version": 1, "units": "in", "ceiling": 102, "outline": RECT, "features": []}
+CATALOG_IDS = {1, 2, 3}
+BED = {"furniture_id": 1, "x": 20, "y": 42, "rotation": 0}
+BEAN_BAG = {"furniture_id": None, "label": "Bean bag chair", "width": 36, "depth": 36,
+            "height": 28, "x": 60.5, "y": 80, "rotation": 90}
+
+
+def placement_errors(*placements):
+    """Validate these placements in the 114 x 150 rectangle."""
+    return validate_placements(list(placements), PLACEMENT_ROOM, CATALOG_IDS)
+
+
+def test_valid_placements_pass():
+    assert placement_errors(BED, BEAN_BAG) == []
+
+
+def test_empty_layout_passes():
+    assert placement_errors() == []
+
+
+def test_placements_must_be_a_list():
+    assert validate_placements({"x": 1}, PLACEMENT_ROOM, CATALOG_IDS) == ["Placements must be a list."]
+
+
+def test_at_most_100_placements():
+    assert placement_errors(*[BED] * 100) == []
+    assert "at most 100" in placement_errors(*[BED] * 101)[0]
+
+
+def test_placement_must_be_an_object():
+    assert placement_errors("bed") == ["Item 1 must be a JSON object."]
+
+
+def test_unknown_furniture_id():
+    errors = placement_errors(BED, {**BED, "furniture_id": 99})
+    assert len(errors) == 1 and errors[0].startswith("Item 2 refers to furniture")
+
+
+@pytest.mark.parametrize("bad_id", ["1", 1.0, True])
+def test_furniture_id_must_be_an_int(bad_id):
+    assert "isn't in the catalog" in placement_errors({**BED, "furniture_id": bad_id})[0]
+
+
+@pytest.mark.parametrize("rotation", [45, 360, -90, "90", 90.0, None, False])
+def test_bad_rotation(rotation):
+    errors = placement_errors({**BED, "rotation": rotation})
+    assert len(errors) == 1 and "0, 90, 180 or 270" in errors[0]
+
+
+@pytest.mark.parametrize("x, y", [(-1, 10), (115, 10), (10, 151), (10, -0.5)])
+def test_centre_outside_bounding_box(x, y):
+    assert "outside the room" in placement_errors({**BED, "x": x, "y": y})[0]
+
+
+def test_centre_on_the_edge_is_inside():
+    assert placement_errors({**BED, "x": 0, "y": 150}) == []
+
+
+@pytest.mark.parametrize("x", [float("nan"), float("inf")])
+def test_nan_and_infinity_positions_fail(x):
+    assert "outside the room" in placement_errors({**BED, "x": x})[0]
+
+
+@pytest.mark.parametrize("x", ["10", None, True])
+def test_position_must_be_a_number(x):
+    assert "needs numbers" in placement_errors({**BED, "x": x})[0]
+
+
+def test_custom_item_needs_a_label():
+    for label in (None, "", "   ", "x" * 61):
+        assert "needs a name" in placement_errors({**BEAN_BAG, "label": label})[0]
+    assert placement_errors({**BEAN_BAG, "label": "x" * 60}) == []
+
+
+@pytest.mark.parametrize("field, value", [
+    ("width", 0), ("width", 201), ("depth", None), ("depth", 36.5),
+    ("height", 121), ("height", 0),
+])
+def test_custom_item_size_limits(field, value):
+    errors = placement_errors({**BEAN_BAG, field: value})
+    assert len(errors) == 1 and f"needs a {field}" in errors[0]
+
+
+def test_custom_item_size_at_the_limits_passes():
+    assert placement_errors({**BEAN_BAG, "width": 200, "depth": 1, "height": 120}) == []
+
+
+def test_every_problem_is_reported():
+    errors = placement_errors({"furniture_id": 99, "x": 999, "y": 0, "rotation": 45})
+    assert len(errors) == 3

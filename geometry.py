@@ -20,6 +20,13 @@ MIN_CORNERS, MAX_CORNERS = 3, 12
 MAX_COORDINATE = 600
 MAX_FEATURES = 40
 
+# Limits for placements (SPEC.md 4.4 and 7.2).
+MAX_PLACEMENTS = 100
+MAX_ITEM_SIZE = 200     # custom item width and depth, inches
+MAX_ITEM_HEIGHT = 120   # custom item height, inches
+MAX_LABEL = 60          # custom item name, characters
+ROTATIONS = (0, 90, 180, 270)
+
 # Tolerance for comparing an integer offset with a possibly non-integer wall
 # length (a diagonal wall's length is a square root).
 EPSILON = 1e-9
@@ -150,9 +157,81 @@ def validate_room(room):
     return errors
 
 
+def validate_placements(placements, room, furniture_ids):
+    """Check a layout's placements (SPEC.md 4.4) before the server stores them.
+
+    `room` must be a valid room-format dict; `furniture_ids` is the set of ids
+    in the furniture catalog (passed in so this file never touches the
+    database). Returns a list of messages for a person, empty when all is well.
+
+    This checks types, ranges, rotations, catalog ids and that each centre is
+    inside the room's bounding box. It deliberately does NOT check collisions:
+    those are advice shown in the planner, not errors (SPEC.md 7.2).
+    """
+    if not isinstance(placements, list):
+        return ["Placements must be a list."]
+    if len(placements) > MAX_PLACEMENTS:
+        return [f"A layout can have at most {MAX_PLACEMENTS} items (got {len(placements)})."]
+
+    xs = [x for x, _ in room["outline"]]
+    ys = [y for _, y in room["outline"]]
+    bounds = (min(xs), min(ys), max(xs), max(ys))
+
+    errors = []
+    for number, placement in enumerate(placements, start=1):
+        errors.extend(_validate_placement(placement, f"Item {number}", bounds, furniture_ids))
+    return errors
+
+
+def _validate_placement(placement, name, bounds, furniture_ids):
+    """Return error messages for one placement. `name` is e.g. "Item 3"."""
+    if not isinstance(placement, dict):
+        return [f"{name} must be a JSON object."]
+
+    errors = []
+    furniture_id = placement.get("furniture_id")
+    if furniture_id is None:
+        errors.extend(_validate_custom_item(placement, name))
+    elif not _is_int(furniture_id) or furniture_id not in furniture_ids:
+        errors.append(f"{name} refers to furniture that isn't in the catalog ({furniture_id!r}).")
+
+    x, y = placement.get("x"), placement.get("y")
+    min_x, min_y, max_x, max_y = bounds
+    if not _is_number(x) or not _is_number(y):
+        errors.append(f"{name} needs numbers for its x and y position.")
+    # Written as "inside" rather than "outside" on purpose: every comparison
+    # with NaN is False, so a NaN position (which Python's JSON parser
+    # accepts) fails this check instead of slipping through.
+    elif not (min_x <= x <= max_x and min_y <= y <= max_y):
+        errors.append(f"{name} has its centre outside the room (at {x}, {y}).")
+
+    rotation = placement.get("rotation")
+    if not _is_int(rotation) or rotation not in ROTATIONS:
+        errors.append(f"{name} must be rotated 0, 90, 180 or 270 degrees (got {rotation!r}).")
+    return errors
+
+
+def _validate_custom_item(placement, name):
+    """Return error messages for a custom "will it fit" item's label and size."""
+    errors = []
+    label = placement.get("label")
+    if not isinstance(label, str) or not 1 <= len(label.strip()) <= MAX_LABEL:
+        errors.append(f"{name} needs a name of 1 to {MAX_LABEL} characters.")
+    for field, limit in (("width", MAX_ITEM_SIZE), ("depth", MAX_ITEM_SIZE), ("height", MAX_ITEM_HEIGHT)):
+        value = placement.get(field)
+        if not _is_int(value) or not 1 <= value <= limit:
+            errors.append(f"{name} needs a {field} from 1 to {limit} in (got {value!r}).")
+    return errors
+
+
 def _is_int(value):
     """True for a real int. (In Python, True and False count as ints; we exclude them.)"""
     return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_number(value):
+    """True for an int or float, excluding True and False."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _validate_outline(outline):

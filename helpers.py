@@ -108,6 +108,22 @@ def login_required(f):
     return decorated_function
 
 
+def api_login_required(f):
+    """Like login_required, but for JSON routes: answer 401 instead of redirecting.
+
+    The planner calls the API with fetch(); a redirect to the login page would
+    hand it HTML it can't use. It checks the user still exists (not just that
+    the session has an id), so a stale session after a database rebuild gets a
+    clean 401 instead of a foreign-key error on save.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if current_user() is None:
+            return json_error("Please log in to do that.", 401)
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 def admin_required(f):
     """Decorate a route so that only logged-in admins can use it.
 

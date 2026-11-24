@@ -70,3 +70,24 @@ Technical choices:
 - **Custom placements include `label`, `width`, `depth`, `height`; catalog placements don't** (`placement_to_json`), matching the two examples in SPEC.md 4.4. S5's layout endpoints reuse the same function.
 - **A room type with no default layout returns `"placements": []`** rather than an error, so the planner can open a freshly built room before an admin has furnished it.
 - **`/api/furniture` lists Harvard items first, then purchases, each in catalog order** (`ORDER BY category = 'purchase', id`), matching the side panel's sections (SPEC.md 8.6).
+
+## 2026-11-24 (S5)
+
+Product choices confirmed by Grace before building:
+
+- **A student may have several layouts with the same name for the same room.** Layouts are told apart by id, and "Save as new" doesn't have to invent a unique name. Alternative: reject duplicates with a message.
+- **If a room type goes back to draft, its students' layouts are kept but unreachable** (404, like the room itself) until it is published again. The planner couldn't draw the room anyway, since `/api/types/<id>` also returns 404.
+
+Technical choices:
+
+- **CONTRACT: added `validate_placements(placements, room, furniture_ids)` to `geometry.py`** (SPEC.md 6 and 7.2 already place it there). The room format (SPEC.md 4) is unchanged. No JavaScript twin: it's a server-side check, and the planner's own checks are the collision rules in `rules.js`. Hannah's default-layout endpoint (A6) should call it too.
+- **`validate_placements` gets the set of catalog ids as an argument** instead of querying the database, so `geometry.py` stays pure and the tests need no database.
+- **Custom item labels are limited to 1–60 characters**, the same as layout names. The spec requires a label but gives no length.
+- **Position checks are written as "inside the box"**, because every comparison with NaN is False; Python's JSON parser accepts `NaN` and `Infinity`, and this way they fail. Tested.
+- **Validation errors are summarised as one message**: the first problem plus "(and N more problems)", keeping the `{"error": "..."}` shape from SPEC.md 7.2.
+- **`api_login_required` checks the user still exists**, not just that the session has an id. A stale session after a database rebuild gets a clean 401 instead of a foreign-key error on save.
+- **Ownership order: 404, then 403.** A layout that doesn't exist, or whose room the viewer can't see, gives 404. Someone else's layout gives 403, as SPEC.md 7.2 asks. That includes default layouts (no owner), even for admins, who save those through `/admin/api/types/<id>/default-layout`.
+- **Saves run inside a transaction** (`run_in_transaction`: `BEGIN` ... `COMMIT`, `ROLLBACK` on any error). A test simulates a crash halfway through inserting placements and checks nothing was left behind.
+- **Catalog placements ignore any `label`/size sent with them**; only custom items store those columns.
+- **`updated` is SQLite's `CURRENT_TIMESTAMP`, which is UTC** (`2026-11-24 07:37:33`). The layouts page (S6) should present it in a friendlier way.
+- **`share_url` is built by hand from `request.host_url`** until S7 adds the `/share/<token>` route; it is always `null` until then.
