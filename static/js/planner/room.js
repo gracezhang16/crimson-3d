@@ -9,10 +9,12 @@
 import * as THREE from "three";
 import { inwardNormal, wallLength, walls } from "../shared/geometry.js";
 import { buildFeatures } from "./features.js";
-import { cameraOutsideWall, isConvexCorner } from "./roomMath.js";
+import { cameraOutsideWall, insideWalls, isConvexCorner } from "./roomMath.js";
 
 const WALL_THICKNESS = 5;   // inches, standing outside the outline (SPEC.md 8.3)
 const STUB_HEIGHT = 4;      // inches, for walls that would hide the room
+const INSIDE_HEIGHT = 8;    // inches: walls between rooms of a suite stay low so every room shows
+const THRESHOLD_COLOR = 0xb98b5e; // the wooden strip across a doorway between rooms
 const GRID_SPACING = 12;    // inches between floor grid lines
 const FLOOR_COLOR = "#e9e2d4";
 const GRID_COLOR = "#cfc5b2";
@@ -34,7 +36,8 @@ const WALL_EDGE_COLOR = 0x9aa1ad;
 export function buildRoom(geometry) {
   const { ceiling } = geometry;
   const group = new THREE.Group();
-  const rooms = geometry.rooms.map((room) => buildOneRoom(room, ceiling, group));
+  const between = insideWalls(geometry); // which walls stand between rooms
+  const rooms = geometry.rooms.map((room, r) => buildOneRoom(room, ceiling, group, between[r]));
 
   const corners = geometry.rooms.flatMap((room) => room.outline);
   const xs = corners.map(([x]) => x);
@@ -45,9 +48,10 @@ export function buildRoom(geometry) {
   );
 
   /**
-   * Dollhouse view: drop every wall that stands between the camera and its
-   * room to a stub, hiding the doors, windows and so on mounted on it; raise
-   * the others to full height. Radiators and door zones are on the floor, so
+   * Dollhouse view: drop every outside wall that stands between the camera
+   * and its room to a stub, hiding the doors, windows and so on mounted on
+   * it; raise the others to full height. Walls between rooms stay low
+   * whatever the camera does. Radiators and door zones are on the floor, so
    * they always show.
    * @param {THREE.Camera} camera
    */
@@ -55,6 +59,7 @@ export function buildRoom(geometry) {
     const cameraPlan = [camera.position.x, camera.position.z];
     for (const { outline, wallParts, features } of rooms) {
       wallParts.forEach((part, i) => {
+        if (part.inside) return;
         part.isStub = cameraOutsideWall(outline, i, cameraPlan);
         setWallHeight(part.mesh, part.isStub ? STUB_HEIGHT : ceiling);
         features.onWall[i].visible = !part.isStub;
@@ -71,17 +76,92 @@ export function buildRoom(geometry) {
  * @param {{outline: number[][], features: object[]}} room
  * @param {number} ceiling
  * @param {THREE.Group} group
+ * @param {object[]} between - insideWalls() for this room, wall by wall
  * @returns {{outline: number[][], wallParts: object[], features: object}}
  */
-function buildOneRoom(room, ceiling, group) {
+function buildOneRoom(room, ceiling, group, between) {
   const { outline } = room;
   group.add(makeFloor(outline));
-  const wallParts = walls(outline).map((_, i) => makeWall(outline, i, ceiling));
+  const wallParts = walls(outline).map((_, i) => (between[i].inside
+    ? makeInsideWall(outline, i, ceiling, between[i])
+    : makeWall(outline, i, ceiling)));
   wallParts.forEach((part) => group.add(part.mesh));
   const features = buildFeatures(room);
-  features.onWall.forEach((wallFeatures) => group.add(wallFeatures));
+  features.onWall.forEach((wallFeatures, i) => {
+    // Panels on a low wall between rooms would float in mid-air, so they're
+    // hidden; a doorway shows as a gap in the wall with a threshold instead.
+    wallFeatures.visible = !between[i].inside;
+    group.add(wallFeatures);
+  });
   group.add(features.onFloor);
+  for (const feature of room.features) {
+    if (feature.kind === "door" && between[feature.wall].inside && between[feature.wall].gap > 0) {
+      group.add(makeThreshold(outline, feature, between[feature.wall].gap));
+    }
+  }
   return { outline, wallParts, features };
+}
+
+/**
+ * A low wall between two rooms, built from pieces with the doorways left out.
+ * Both rooms draw their side of the gap, each half as thick as the gap, so
+ * together they fill it without overlapping (overlapping faces flicker).
+ *
+ * @param {number[][]} outline
+ * @param {number} i - wall index
+ * @param {number} ceiling - inches
+ * @param {{gap: number, pieces: number[][]}} info - from insideWalls()
+ * @returns {{mesh: THREE.Group, length: number, top: THREE.Vector3, isStub: boolean, inside: boolean}}
+ */
+function makeInsideWall(outline, i, ceiling, info) {
+  const { start, end } = walls(outline)[i];
+  const length = wallLength(outline, i);
+  const [nx, ny] = inwardNormal(outline, i);
+  const direction = [(end[0] - start[0]) / length, (end[1] - start[1]) / length];
+  const thickness = Math.max(info.gap / 2, 0.75);
+  const material = new THREE.MeshStandardMaterial({ color: WALL_COLOR });
+  const pieces = new THREE.Group();
+  for (const [from, to] of info.pieces) {
+    const box = new THREE.BoxGeometry(to - from, 1, thickness);
+    box.translate(0, 0.5, 0);
+    const piece = new THREE.Mesh(box, material);
+    piece.add(new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: WALL_EDGE_COLOR })));
+    const along = (from + to) / 2;
+    piece.position.set(
+      start[0] + direction[0] * along - nx * (thickness / 2), 0,
+      start[1] + direction[1] * along - ny * (thickness / 2),
+    );
+    piece.rotation.y = -Math.atan2(direction[1], direction[0]);
+    pieces.add(piece);
+  }
+  // Built 1 unit tall like the outside walls, so one scale sets the height.
+  setWallHeight(pieces, INSIDE_HEIGHT);
+  const mid = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
+  // isStub is always true, so wall-length labels skip these low walls.
+  return { mesh: pieces, length, top: new THREE.Vector3(mid[0], ceiling, mid[1]), isStub: true, inside: true };
+}
+
+/**
+ * A wooden strip across the gap at a doorway between rooms.
+ *
+ * @param {number[][]} outline
+ * @param {{wall: number, offset: number, width: number}} door
+ * @param {number} gap - inches between the two rooms
+ * @returns {THREE.Mesh}
+ */
+function makeThreshold(outline, door, gap) {
+  const { start, end } = walls(outline)[door.wall];
+  const length = wallLength(outline, door.wall);
+  const [nx, ny] = inwardNormal(outline, door.wall);
+  const direction = [(end[0] - start[0]) / length, (end[1] - start[1]) / length];
+  const along = door.offset + door.width / 2;
+  const strip = new THREE.Mesh(
+    new THREE.BoxGeometry(door.width, 0.4, gap),
+    new THREE.MeshStandardMaterial({ color: THRESHOLD_COLOR, roughness: 0.7 }),
+  );
+  strip.position.set(start[0] + direction[0] * along - nx * (gap / 2), 0.2, start[1] + direction[1] * along - ny * (gap / 2));
+  strip.rotation.y = -Math.atan2(direction[1], direction[0]);
+  return strip;
 }
 
 /**
@@ -177,7 +257,7 @@ function makeWall(outline, i, ceiling) {
 }
 
 /**
- * @param {THREE.Mesh} mesh - a wall from makeWall()
+ * @param {THREE.Object3D} mesh - a wall from makeWall() or makeInsideWall()
  * @param {number} height - inches
  */
 function setWallHeight(mesh, height) {

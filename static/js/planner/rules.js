@@ -14,6 +14,7 @@
  */
 
 import { featureSpan, inwardNormal, walls } from "../shared/geometry.js";
+import { insideWallBoxes } from "./roomMath.js";
 
 const CLOSET_ZONE_DEPTH = 24;      // inches in front of a closet (SPEC.md 4.3)
 const DEFAULT_RADIATOR_DEPTH = 6;  // SPEC.md 4.2
@@ -445,8 +446,9 @@ function lowerFirst(name) {
 
 /**
  * Rule 8: each item's issue, or null if it fits. At most one issue per item,
- * the first that applies in this order: too big, outside the room, blocks
- * the door, blocks the closet, hits the radiator, overlaps another item.
+ * the first that applies in this order: too big, crosses a wall (straddles
+ * the wall between two rooms of a suite) or outside the room, blocks the
+ * door, blocks the closet, hits the radiator, overlaps another item.
  *
  * Zones are compared by their bounding boxes, which are exact for walls that
  * run north-south or east-west (all our rooms) and slightly generous for an
@@ -460,6 +462,7 @@ function lowerFirst(name) {
 export function evaluate(geometry, entries) {
   const outlines = geometry.rooms.map((room) => room.outline);
   const allZones = zones(geometry);
+  const wallsBetweenRooms = insideWallBoxes(geometry);
   const boxes = entries.map((entry) => footprintBox(entry.placement, entry.item));
 
   return entries.map((entry, i) => {
@@ -469,7 +472,9 @@ export function evaluate(geometry, entries) {
       return "Too big for this room";
     }
     if (!insideAnyRoom(box, outlines)) {
-      return "Outside the room";
+      // Not wholly inside one room: if it overlaps a wall between rooms it's
+      // straddling that wall; otherwise it sticks out of the suite.
+      return wallsBetweenRooms.some((wall) => overlaps(box, wall)) ? "Crosses a wall" : "Outside the room";
     }
     if (item.height <= FLAT_HEIGHT) {
       return null; // rule 3: nothing else applies to a rug

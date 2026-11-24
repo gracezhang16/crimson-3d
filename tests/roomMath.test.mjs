@@ -3,7 +3,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { arrowDirection, cameraOutsideWall, isConvexCorner } from "../static/js/planner/roomMath.js";
+import { readFileSync } from "node:fs";
+
+import {
+  arrowDirection, cameraOutsideWall, cutIntervals, insideWallBoxes, insideWalls, isConvexCorner,
+} from "../static/js/planner/roomMath.js";
 
 // Clockwise on screen from the top-left corner, as in SPEC.md 4.1.
 const RECT = [[0, 0], [114, 0], [114, 150], [0, 150]];
@@ -88,4 +92,70 @@ test("from the default south-east view, up is north (the nearer axis)", () => {
 test("straight overhead, arrows fall back to the compass", () => {
   assert.deepEqual(arrowDirection("ArrowUp", [0, 0]), [0, -1]);
   assert.deepEqual(arrowDirection("ArrowRight", [0, 0]), [1, 0]);
+});
+
+
+// --- Suites: walls between rooms (U2) -------------------------------------------
+
+const SAMPLE_SUITE = JSON.parse(readFileSync(
+  new URL("../seed/suites/demo-hall-two-bedroom-suite.json", import.meta.url), "utf8",
+)).geometry;
+// Rooms: 0 Bedroom A (0..120 x 0..144), 1 Bedroom B (0..120 x 149..293),
+// 2 Common room (125..305 x 0..293). Walls: 0 north, 1 east, 2 south, 3 west.
+
+test("a one-room suite has no inside walls", () => {
+  const single = { rooms: [{ outline: RECT, features: [] }] };
+  assert.deepEqual(insideWalls(single)[0].map((w) => w.inside), [false, false, false, false]);
+});
+
+test("the sample suite's walls between rooms are found, with their 5 in gap", () => {
+  const walls = insideWalls(SAMPLE_SUITE);
+  assert.deepEqual(walls[0].map((w) => w.inside), [false, true, true, false]);   // A: east and south
+  assert.deepEqual(walls[1].map((w) => w.inside), [true, true, false, false]);   // B: north and east
+  assert.deepEqual(walls[2].map((w) => w.inside), [false, false, false, true]);  // common: west
+  assert.equal(walls[0][1].gap, 5);
+  assert.equal(walls[2][3].gap, 5);
+});
+
+test("a door between rooms opens both walls", () => {
+  const walls = insideWalls(SAMPLE_SUITE);
+  // Bedroom A's door: east wall, 100 in from its north end, 32 wide.
+  assert.deepEqual(walls[0][1].doorways, [[100, 132]]);
+  assert.deepEqual(walls[0][1].pieces, [[0, 100], [132, 144]]);
+  // The common room's west wall runs north from (125, 293): A's door (y 100..132)
+  // is 161..193 along it, and B's door (y 153..185) is 108..140.
+  assert.deepEqual(walls[2][3].doorways.sort((p, q) => p[0] - q[0]), [[108, 140], [161, 193]]);
+  assert.deepEqual(walls[2][3].pieces, [[0, 108], [140, 161], [193, 293]]);
+});
+
+test("rooms sharing a wall (no gap) still find each other", () => {
+  const shared = { rooms: [
+    { outline: [[0, 0], [100, 0], [100, 100], [0, 100]], features: [] },
+    { outline: [[100, 0], [200, 0], [200, 100], [100, 100]], features: [] },
+  ] };
+  const walls = insideWalls(shared);
+  assert.equal(walls[0][1].inside, true);
+  assert.equal(walls[0][1].gap, 0);
+  assert.equal(walls[1][3].inside, true);
+});
+
+test("walls 13 in apart are not between rooms", () => {
+  const apart = { rooms: [
+    { outline: [[0, 0], [100, 0], [100, 100], [0, 100]], features: [] },
+    { outline: [[113, 0], [200, 0], [200, 100], [113, 100]], features: [] },
+  ] };
+  assert.equal(insideWalls(apart)[0][1].inside, false);
+});
+
+test("cutIntervals", () => {
+  assert.deepEqual(cutIntervals(100, []), [[0, 100]]);
+  assert.deepEqual(cutIntervals(100, [[10, 20], [50, 60]]), [[0, 10], [20, 50], [60, 100]]);
+  assert.deepEqual(cutIntervals(100, [[0, 30], [90, 120]]), [[30, 90]]);
+  assert.deepEqual(cutIntervals(100, [[10, 40], [30, 50]]), [[0, 10], [50, 100]]);
+});
+
+test("insideWallBoxes covers the gaps between rooms", () => {
+  const boxes = insideWallBoxes(SAMPLE_SUITE);
+  assert.ok(boxes.some((b) => b.minX === 120 && b.maxX === 125 && b.minY === 0 && b.maxY === 144));
+  assert.ok(boxes.some((b) => b.minY === 144 && b.maxY === 149 && b.minX === 0 && b.maxX === 120));
 });

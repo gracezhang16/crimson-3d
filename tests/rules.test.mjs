@@ -334,9 +334,15 @@ test("an item is fine in either room of a suite", () => {
   assert.deepEqual(evaluate(SUITE, [at("bed", 20, 42), at("desk", 200, 12)]), [null, null]);
 });
 
-test("an item in the gap between rooms is outside", () => {
+test("an item straddling the wall between rooms crosses a wall", () => {
   assert.equal(insideAnyRoom(box(118, 10, 127, 20), [BEDROOM, COMMON]), false);
-  assert.deepEqual(evaluate(SUITE, [at("desk", 122, 60, 90)]), ["Outside the room"]);
+  assert.deepEqual(evaluate(SUITE, [at("desk", 122, 60, 90)]), ["Crosses a wall"]);   // in the gap
+  assert.deepEqual(evaluate(SUITE, [at("desk", 122, 60)]), ["Crosses a wall"]);       // half in each room
+});
+
+test("an item poking out of the suite's outside wall is still outside the room", () => {
+  assert.deepEqual(evaluate(SUITE, [at("desk", 300, 60)]), ["Outside the room"]);
+  assert.deepEqual(evaluate(SUITE, [at("desk", 60, 140)]), ["Outside the room"]);     // bedroom's south wall is outside here
 });
 
 test("zones come from every room", () => {

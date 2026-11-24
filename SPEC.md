@@ -193,10 +193,10 @@ All rules work on axis-aligned footprint rectangles, because rotation is in 90°
 2. **Overlap.** Two rectangles overlap when they overlap on both axes by more than 0.01 in. Touching edges is fine.
 3. **Flat items** (height ≤ 1, such as rugs) never collide with anything.
 4. **Under-bed clearance.** A catalog item may have `clearance` (the bed has one). An item whose height is ≤ that clearance may overlap it (storage bins slide under the bed).
-5. **Inside the room.** All four footprint corners are inside the outline (point-in-polygon; on the boundary counts as inside), **and** no outline edge passes through the footprint's interior. The second check catches the inner corner of an L-shaped room.
+5. **Inside the room.** All four footprint corners are inside one room's outline (point-in-polygon; on the boundary counts as inside), **and** no edge of that outline passes through the footprint's interior. The second check catches notched rooms. In a suite, an item may be in any room, but must be wholly inside one. *(Updated 2026-11-24 for suites.)*
 6. **Zones.** Overlap with a door, closet or radiator zone produces that zone's issue.
 7. **Snap.** On drag, round the centre to whole inches. If a footprint edge is within 3 in of a wall that is parallel to it, move it flush. While dragging, keep the item inside the room's bounding box.
-8. **Issues.** Each item gets at most one issue, in this priority: "Too big for this room", "Outside the room", "Blocks the door", "Blocks the closet", "Hits the radiator", "Overlaps the {other item name}". Items with an issue are tinted orange; a status pill shows "Everything fits" or "N items don't fit".
+8. **Issues.** Each item gets at most one issue, in this priority: "Too big for this room", "Crosses a wall" (straddles the wall between two rooms of a suite) or "Outside the room", "Blocks the door", "Blocks the closet", "Hits the radiator", "Overlaps the {other item name}". Items with an issue are tinted orange; a status pill shows "Everything fits" or "N items don't fit". *(Updated 2026-11-24: "Crosses a wall" added for suites.)*
 
 These are the only collision rules. Do not add physics, gravity or stacking.
 

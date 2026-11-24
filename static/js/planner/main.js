@@ -10,7 +10,7 @@
 
 import { apiFetch } from "../shared/api.js";
 import { attachInteraction } from "./interaction.js";
-import { createWallLabels } from "./labels.js";
+import { createRoomLabels, createWallLabels } from "./labels.js";
 import { createLayout } from "./layout.js";
 import { createPanel } from "./panel.js";
 import { buildRoom } from "./room.js";
@@ -94,11 +94,13 @@ async function start(canvas, config) {
   }
 
   const labels = createWallLabels(container, room.walls);
+  const roomLabels = createRoomLabels(container, roomType.geometry.rooms);
   // Order matters: the room decides which walls are stubs, then the labels
   // pick from the walls still standing.
   view.addFrameCallback((camera) => {
     room.update(camera);
     labels.update(camera);
+    roomLabels.update(camera);
   });
   view.fitCamera(room.bounds);
 }

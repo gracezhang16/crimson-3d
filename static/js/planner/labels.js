@@ -63,3 +63,58 @@ export function createWallLabels(container, roomWalls) {
 
   return { update };
 }
+
+
+/**
+ * Room names lying on each room's floor ("Bedroom A", "Common room"), for
+ * suites with more than one room. Positioned each frame like the wall labels.
+ *
+ * @param {HTMLElement} container
+ * @param {{name: string, outline: number[][]}[]} rooms
+ * @returns {{update: (camera: THREE.Camera) => void}}
+ */
+export function createRoomLabels(container, rooms) {
+  if (rooms.length < 2) {
+    return { update() {} };
+  }
+  const point = new THREE.Vector3();
+  const labels = rooms.map((room) => {
+    const element = document.createElement("div");
+    element.className = "room-label";
+    element.textContent = room.name;
+    container.append(element);
+    return { element, center: centroid(room.outline) };
+  });
+
+  function update(camera) {
+    const { clientWidth: width, clientHeight: height } = container;
+    for (const { element, center } of labels) {
+      point.set(center[0], 1, center[1]).project(camera);
+      element.hidden = point.z > 1;
+      element.style.left = `${((point.x + 1) / 2) * width}px`;
+      element.style.top = `${((1 - point.y) / 2) * height}px`;
+    }
+  }
+  return { update };
+}
+
+/**
+ * The centre of a room's floor (its area centroid, which for an L-shape lies
+ * within the bulk of the room rather than at its bounding box's middle).
+ *
+ * @param {number[][]} outline
+ * @returns {number[]} [x, y]
+ */
+function centroid(outline) {
+  let area = 0;
+  let cx = 0;
+  let cy = 0;
+  outline.forEach(([x1, y1], i) => {
+    const [x2, y2] = outline[(i + 1) % outline.length];
+    const cross = x1 * y2 - x2 * y1;
+    area += cross;
+    cx += (x1 + x2) * cross;
+    cy += (y1 + y2) * cross;
+  });
+  return [cx / (3 * area), cy / (3 * area)];
+}
