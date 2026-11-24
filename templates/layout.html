@@ -35,7 +35,16 @@
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('pages.index') }}">Dorms</a></li>
                 </ul>
-                {# S2 adds Log in / Register / Log out here; S6 adds My room and My layouts. #}
+                {# `user` comes from inject_user() in app.py. S6 adds My room and My layouts. #}
+                <ul class="navbar-nav">
+                    {% if user %}
+                        <li class="nav-item"><span class="navbar-text me-md-3">{{ user.email }}</span></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('pages.logout') }}">Log out</a></li>
+                    {% else %}
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('pages.register') }}">Register</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('pages.login') }}">Log in</a></li>
+                    {% endif %}
+                </ul>
             </div>
         </div>
     </nav>

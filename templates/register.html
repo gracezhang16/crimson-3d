@@ -1,0 +1,39 @@
+{% extends "layout.html" %}
+
+{% block title %}Register{% endblock %}
+
+{% block main %}
+    <div class="mx-auto narrow-form">
+        <h1 class="h3 mb-3">Create an account</h1>
+        <p class="text-body-secondary">An account lets you save layouts and share them.</p>
+
+        {% if error %}
+            <div class="alert alert-danger" role="alert">{{ error }}</div>
+        {% endif %}
+
+        {# autocomplete values tell password managers what each field is:
+           "new-password" offers to generate and save a strong password. #}
+        <form action="{{ url_for('pages.register') }}" method="post">
+            <div class="mb-3">
+                <label for="email" class="form-label">Email</label>
+                <input id="email" name="email" type="email" class="form-control"
+                       value="{{ email or '' }}" autocomplete="email" required autofocus>
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input id="password" name="password" type="password" class="form-control"
+                       autocomplete="new-password" minlength="8" required
+                       aria-describedby="password-help">
+                <div id="password-help" class="form-text">At least 8 characters.</div>
+            </div>
+            <div class="mb-3">
+                <label for="confirmation" class="form-label">Confirm password</label>
+                <input id="confirmation" name="confirmation" type="password" class="form-control"
+                       autocomplete="new-password" required>
+            </div>
+            <button type="submit" class="btn btn-crimson w-100">Register</button>
+        </form>
+
+        <p class="mt-3 small">Already have an account? <a href="{{ url_for('pages.login') }}">Log in</a></p>
+    </div>
+{% endblock %}

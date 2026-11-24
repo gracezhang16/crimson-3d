@@ -9,3 +9,21 @@
 .bg-crimson {
     background-color: var(--crimson);
 }
+
+/* Primary button in the site colour (Bootstrap's btn-primary is blue). */
+.btn-crimson {
+    --bs-btn-color: #fff;
+    --bs-btn-bg: var(--crimson);
+    --bs-btn-border-color: var(--crimson);
+    --bs-btn-hover-color: #fff;
+    --bs-btn-hover-bg: #8a1728;
+    --bs-btn-hover-border-color: #8a1728;
+    --bs-btn-active-color: #fff;
+    --bs-btn-active-bg: #761423;
+    --bs-btn-active-border-color: #761423;
+}
+
+/* Keep short forms (login, register) from stretching across wide screens. */
+.narrow-form {
+    max-width: 24rem;
+}

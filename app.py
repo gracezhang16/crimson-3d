@@ -14,6 +14,7 @@ from flask_session import Session
 
 from admin import admin
 from api import api
+from helpers import current_user
 from pages import pages
 
 app = Flask(__name__)
@@ -30,3 +31,14 @@ Session(app)
 app.register_blueprint(pages)
 app.register_blueprint(api, url_prefix="/api")
 app.register_blueprint(admin, url_prefix="/admin")
+
+
+@app.context_processor
+def inject_user():
+    """Make `user` (the logged-in user's row, or None) available in every template.
+
+    A context processor runs before each template is rendered; the dict it
+    returns is added to the template's variables. layout.html uses `user` to
+    show Log in / Register or the user's email and Log out.
+    """
+    return {"user": current_user()}

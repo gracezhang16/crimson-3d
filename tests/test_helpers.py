@@ -21,11 +21,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 @pytest.fixture
 def users():
-    """Insert one student and one admin; delete them after the test.
-
-    The test database is shared by every test in the run (see conftest.py),
-    so we clean up to leave it as we found it.
-    """
+    """Insert one student and one admin. conftest.py resets the database
+    before every test, so there is nothing to clean up afterwards."""
     student_id = db.execute(
         "INSERT INTO users (email, hash, role) VALUES (?, ?, 'student')",
         "student@example.com", generate_password_hash("test-password"),
@@ -34,8 +31,7 @@ def users():
         "INSERT INTO users (email, hash, role) VALUES (?, ?, 'admin')",
         "admin@example.com", generate_password_hash("test-password"),
     )
-    yield {"student": student_id, "admin": admin_id}
-    db.execute("DELETE FROM users WHERE id IN (?, ?)", student_id, admin_id)
+    return {"student": student_id, "admin": admin_id}
 
 
 @pytest.fixture

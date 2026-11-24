@@ -1,5 +1,6 @@
 """Shared helpers for every blueprint: the database handle, the error page,
-the login and admin guards, and current_user() (SPEC.md 7.4).
+the login and admin guards, current_user(), and the new-account checks shared
+by /register and create_admin.py (SPEC.md 7.4).
 """
 
 import os
@@ -19,6 +20,32 @@ if not os.path.isfile(DATABASE_URL.removeprefix("sqlite:///")):
 # (checked in cs50 9.5.0, cs50/sql.py), so we don't repeat it here.
 # tests/test_helpers.py proves a bad foreign key is rejected.
 db = SQL(DATABASE_URL)
+
+
+MIN_PASSWORD_LENGTH = 8
+
+
+def normalize_email(text):
+    """Trim spaces and lower-case an email, so Foo@x.com and foo@x.com are one account."""
+    return (text or "").strip().lower()
+
+
+def check_new_account(email, password, confirmation):
+    """Return a message explaining what is wrong with a new account, or None if it is fine.
+
+    Used by the register page and by create_admin.py so both apply the same
+    rules. `email` should already be normalized. Whether the email is already
+    taken is checked separately, by the database's UNIQUE constraint.
+    """
+    if not email or not password or not confirmation:
+        return "Please fill in your email, a password and the confirmation."
+    if "@" not in email or len(email) > 254:
+        return "That doesn't look like an email address."
+    if len(password) < MIN_PASSWORD_LENGTH:
+        return f"Your password needs at least {MIN_PASSWORD_LENGTH} characters."
+    if password != confirmation:
+        return "The two passwords don't match."
+    return None
 
 
 def apology(message, code=400):
