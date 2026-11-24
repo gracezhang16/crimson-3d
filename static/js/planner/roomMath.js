@@ -49,3 +49,29 @@ export function cameraOutsideWall(outline, i, camera) {
   const [sx, sy] = outline[i];
   return (camera[0] - sx) * nx + (camera[1] - sy) * ny < 0;
 }
+
+/**
+ * Which way an arrow key moves an item, in plan coordinates, so that ↑ moves
+ * it "away" from the camera on screen (SPEC.md 8.5 asks for arrow keys; the
+ * team chose camera-relative directions). The result always runs along a
+ * wall direction (north, south, east or west), so items stay tidy.
+ *
+ * @param {"ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight"} key
+ * @param {number[]} forward - the camera's viewing direction on the floor,
+ *   [x, y] in plan coordinates (three.js x and z of target minus camera)
+ * @returns {number[]} a unit step [dx, dy]
+ */
+export function arrowDirection(key, forward) {
+  const [fx, fy] = forward;
+  // "Away from the camera", rounded to the nearest of the four directions.
+  const up = Math.abs(fx) > Math.abs(fy) ? [Math.sign(fx), 0] : [0, Math.sign(fy) || -1];
+  // Screen right is forward turned a quarter clockwise as seen from above.
+  // With y pointing south, that turns (x, y) into (-y, x).
+  const right = [-up[1] + 0, up[0] + 0];
+  switch (key) {
+    case "ArrowUp": return up;
+    case "ArrowDown": return [-up[0] + 0, -up[1] + 0];
+    case "ArrowRight": return right;
+    default: return [-right[0] + 0, -right[1] + 0];
+  }
+}

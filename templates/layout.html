@@ -4,6 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}{% endblock %} · Crimson3D</title>
+    {# A tiny crimson square as the tab icon, written into the page so browsers
+       don't request /favicon.ico (a 404 shows as an error in the console). #}
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23a51c30'/%3E%3C/svg%3E">
 
     <!-- Bootstrap is vendored (saved in static/) so the site works offline. -->
     <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">

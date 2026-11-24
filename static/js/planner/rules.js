@@ -3,13 +3,14 @@
  *
  * PURE: imports nothing from three.js or the DOM, so `node --test` can run it
  * (tests/rules.test.mjs). P3 added the zones that wall features create on the
- * floor; P4 adds item sizes and footprints; P7 adds overlap, inside-the-room,
- * snapping and issues.
+ * floor; P4 added item sizes and footprints; P5 adds overlap, inside-the-room,
+ * snapping and finding a free spot; P7 adds flat items, under-bed clearance
+ * and the issues list.
  *
  * Coordinates are plan inches, [x, y] with y pointing south (SPEC.md 4.1).
  */
 
-import { featureSpan, inwardNormal } from "../shared/geometry.js";
+import { featureSpan, inwardNormal, walls } from "../shared/geometry.js";
 
 const CLOSET_ZONE_DEPTH = 24;      // inches in front of a closet (SPEC.md 4.3)
 const DEFAULT_RADIATOR_DEPTH = 6;  // SPEC.md 4.2
@@ -139,4 +140,222 @@ export function footprintBox(placement, size) {
     maxX: placement.x + halfX,
     maxY: placement.y + halfY,
   };
+}
+
+
+// --- P5: overlap, inside the room, snap, free spot -----------------------------
+
+const OVERLAP_TOLERANCE = 0.01; // inches; touching edges don't count (rule 2)
+const SNAP_DISTANCE = 3;        // inches from a parallel wall (rule 7)
+const FREE_SPOT_GRID = 6;       // inches between spots tried (SPEC.md 8.6)
+
+/**
+ * Rule 2: do two footprint boxes overlap? Only if they overlap on both axes
+ * by more than 0.01 in, so items standing edge to edge are fine.
+ *
+ * @param {{minX: number, minY: number, maxX: number, maxY: number}} a
+ * @param {{minX: number, minY: number, maxX: number, maxY: number}} b
+ * @returns {boolean}
+ */
+export function overlaps(a, b) {
+  const overlapX = Math.min(a.maxX, b.maxX) - Math.max(a.minX, b.minX);
+  const overlapY = Math.min(a.maxY, b.maxY) - Math.max(a.minY, b.minY);
+  return overlapX > OVERLAP_TOLERANCE && overlapY > OVERLAP_TOLERANCE;
+}
+
+/**
+ * Is point p on the segment from a to b?
+ * @returns {boolean}
+ */
+function onSegment([px, py], [ax, ay], [bx, by]) {
+  const cross = (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+  return Math.abs(cross) < 1e-9 &&
+    px >= Math.min(ax, bx) - 1e-9 && px <= Math.max(ax, bx) + 1e-9 &&
+    py >= Math.min(ay, by) - 1e-9 && py <= Math.max(ay, by) + 1e-9;
+}
+
+/**
+ * Is a point inside the outline? Points on the boundary count as inside.
+ *
+ * Ray casting: imagine a ray from the point going right (east). Each time it
+ * crosses an edge it goes from inside to outside or back, so an odd number
+ * of crossings means the point is inside.
+ *
+ * @param {number[]} point - [x, y]
+ * @param {number[][]} outline
+ * @returns {boolean}
+ */
+export function pointInPolygon(point, outline) {
+  const [px, py] = point;
+  let inside = false;
+  for (const { start, end } of walls(outline)) {
+    if (onSegment(point, start, end)) {
+      return true;
+    }
+    const [ax, ay] = start;
+    const [bx, by] = end;
+    // Does this edge straddle the ray's height, and cross it to the right?
+    if ((ay > py) !== (by > py) && px < ax + ((py - ay) * (bx - ax)) / (by - ay)) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/**
+ * Does the segment from a to b pass through the inside of a box (not just
+ * touch its edge)? Uses the Liang-Barsky clipping method on the box shrunk
+ * by the overlap tolerance: walk along the segment as t goes from 0 to 1 and
+ * narrow down the stretch of t that lies inside the box on each side.
+ *
+ * @returns {boolean}
+ */
+function segmentEntersBox([ax, ay], [bx, by], box) {
+  const t = OVERLAP_TOLERANCE;
+  const [minX, minY, maxX, maxY] = [box.minX + t, box.minY + t, box.maxX - t, box.maxY - t];
+  if (minX >= maxX || minY >= maxY) {
+    return false;
+  }
+  const dx = bx - ax;
+  const dy = by - ay;
+  let low = 0;
+  let high = 1;
+  for (const [p, q] of [[-dx, ax - minX], [dx, maxX - ax], [-dy, ay - minY], [dy, maxY - ay]]) {
+    if (p === 0) {
+      if (q < 0) return false; // parallel to this side and outside it
+    } else if (p < 0) {
+      low = Math.max(low, q / p);
+    } else {
+      high = Math.min(high, q / p);
+    }
+    if (low > high) return false;
+  }
+  return true;
+}
+
+/**
+ * Rule 5: is a footprint inside the room? All four corners must be inside
+ * the outline (the boundary counts), AND no wall may pass through the
+ * footprint. The second check catches a box straddling the inner corner of
+ * an L-shape, whose corners can all be inside while the corner pokes in.
+ *
+ * @param {{minX: number, minY: number, maxX: number, maxY: number}} box
+ * @param {number[][]} outline
+ * @returns {boolean}
+ */
+export function insideRoom(box, outline) {
+  const corners = [[box.minX, box.minY], [box.maxX, box.minY], [box.maxX, box.maxY], [box.minX, box.maxY]];
+  return corners.every((corner) => pointInPolygon(corner, outline)) &&
+    walls(outline).every(({ start, end }) => !segmentEntersBox(start, end, box));
+}
+
+/**
+ * The room's bounding box.
+ * @param {number[][]} outline
+ * @returns {{minX: number, minY: number, maxX: number, maxY: number}}
+ */
+function outlineBox(outline) {
+  const xs = outline.map(([x]) => x);
+  const ys = outline.map(([, y]) => y);
+  return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) };
+}
+
+/**
+ * How far to move a footprint along one axis to sit flush against the
+ * nearest parallel wall within SNAP_DISTANCE, or 0.
+ *
+ * @param {number[][]} outline
+ * @param {{minX: number, minY: number, maxX: number, maxY: number}} box
+ * @param {"x" | "y"} axis - "x": look at walls running north-south
+ * @returns {number}
+ */
+function flushShift(outline, box, axis) {
+  let best = 0;
+  walls(outline).forEach(({ start, end }, i) => {
+    const [nx, ny] = inwardNormal(outline, i);
+    const normal = axis === "x" ? nx : ny;
+    if (Math.abs(normal) !== 1) {
+      return; // not a wall parallel to this pair of footprint edges
+    }
+    // The wall must run alongside the footprint, not just line up with it.
+    const [lo, hi] = axis === "x"
+      ? [Math.min(start[1], end[1]), Math.max(start[1], end[1])]
+      : [Math.min(start[0], end[0]), Math.max(start[0], end[0])];
+    const [boxLo, boxHi] = axis === "x" ? [box.minY, box.maxY] : [box.minX, box.maxX];
+    if (Math.min(hi, boxHi) - Math.max(lo, boxLo) <= 0) {
+      return;
+    }
+    const wall = axis === "x" ? start[0] : start[1];
+    // The room is on the normal's side, so the footprint edge facing this
+    // wall is the low edge when the normal points +, the high edge when -.
+    const edge = normal > 0 ? (axis === "x" ? box.minX : box.minY) : (axis === "x" ? box.maxX : box.maxY);
+    const shift = wall - edge;
+    if (Math.abs(shift) <= SNAP_DISTANCE && (best === 0 || Math.abs(shift) < Math.abs(best))) {
+      best = shift;
+    }
+  });
+  return best;
+}
+
+/**
+ * Rule 7: where a dragged (or nudged, or turned) item should end up.
+ * Round the centre to whole inches; if a footprint edge is within 3 in of a
+ * parallel wall, move it flush; keep the whole footprint inside the room's
+ * bounding box (an item wider than the room is centred on that axis).
+ *
+ * Moving flush to walls is for dragging (SPEC.md 4.5 rule 7 says "on drag").
+ * Arrow keys and turning pass { flush: false }, otherwise nudging an item
+ * 1 in away from a wall would snap it straight back.
+ *
+ * @param {{x: number, y: number}} position - the wanted centre
+ * @param {{width: number, depth: number}} size
+ * @param {number} rotation
+ * @param {number[][]} outline
+ * @param {{flush?: boolean}} [options]
+ * @returns {{x: number, y: number}}
+ */
+export function snap(position, size, rotation, outline, { flush = true } = {}) {
+  const { halfX, halfY } = footprint(size, rotation);
+  let x = Math.round(position.x);
+  let y = Math.round(position.y);
+  const box = () => ({ minX: x - halfX, minY: y - halfY, maxX: x + halfX, maxY: y + halfY });
+  if (flush) {
+    x += flushShift(outline, box(), "x");
+    y += flushShift(outline, box(), "y");
+  }
+
+  const room = outlineBox(outline);
+  x = halfX * 2 > room.maxX - room.minX ? (room.minX + room.maxX) / 2
+    : Math.min(Math.max(x, room.minX + halfX), room.maxX - halfX);
+  y = halfY * 2 > room.maxY - room.minY ? (room.minY + room.maxY) / 2
+    : Math.min(Math.max(y, room.minY + halfY), room.maxY - halfY);
+  return { x, y };
+}
+
+/**
+ * Where to put a newly added item (SPEC.md 8.6): the first spot, scanning the
+ * room on a 6 in grid from the north-west, where the item is inside the room
+ * and overlaps nothing. If there's no such spot, the middle of the room.
+ * Flat items (height 1 in or less, like rugs) never collide (rule 3), so they
+ * only need to be inside the room, and flat items already placed never block.
+ *
+ * @param {{width: number, depth: number, height: number}} size
+ * @param {number} rotation
+ * @param {number[][]} outline
+ * @param {{box: object, height: number}[]} others - items already placed
+ * @returns {{x: number, y: number}}
+ */
+export function findFreeSpot(size, rotation, outline, others) {
+  const { halfX, halfY } = footprint(size, rotation);
+  const room = outlineBox(outline);
+  const blockers = size.height <= 1 ? [] : others.filter((other) => other.height > 1);
+  for (let y = room.minY + halfY; y <= room.maxY - halfY; y += FREE_SPOT_GRID) {
+    for (let x = room.minX + halfX; x <= room.maxX - halfX; x += FREE_SPOT_GRID) {
+      const box = { minX: x - halfX, minY: y - halfY, maxX: x + halfX, maxY: y + halfY };
+      if (insideRoom(box, outline) && !blockers.some((other) => overlaps(box, other.box))) {
+        return { x, y };
+      }
+    }
+  }
+  return { x: (room.minX + room.maxX) / 2, y: (room.minY + room.maxY) / 2 };
 }

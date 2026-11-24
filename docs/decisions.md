@@ -231,3 +231,23 @@ Technical choices:
 - **Moving uses `INSERT OR REPLACE`**: because `user_id` is the primary key of `assignments`, the student's old row is replaced by the new one in a single statement.
 - **The rooms page reports outcomes with flash messages and redirects after every POST** (add, assign, unassign), so reloading never repeats an action. Emails are trimmed and lower-cased with `normalize_email`, as at registration.
 - **Room numbers are 1–20 characters, unique per dorm** (`UNIQUE (dorm_id, number)`).
+
+## 2026-11-24 (P5, built for Claire with the team's agreement)
+
+Product choice confirmed by Grace:
+
+- **Arrow keys move items relative to the camera**: ↑ moves along whichever wall direction points most "away" on screen (`roomMath.arrowDirection`, tested from four viewpoints). Alternative: fixed directions (↑ = north), which feel backwards when looking from the north.
+
+Technical choices:
+
+- **`layout.js` is the single source of truth** for the placed items and the selection. Every change goes through it and then notifies listeners (the panel now; "Unsaved changes" in P6).
+- **Picking uses a `Raycaster`; dragging intersects the pointer's ray with a horizontal plane at the grab height**, keeping the grab offset, so items slide along the floor (SPEC.md 8.5). Pointer capture keeps a drag going outside the canvas.
+- **The pointer-down listener runs in the capture phase**, before OrbitControls' own listener, so a press on furniture switches the camera controls off before they start turning the view. Right- and middle-drag always go to the camera.
+- **Wall-flush snapping applies to dragging only** (SPEC.md 4.5 rule 7 says "on drag"). Arrow keys and turning only round and keep the item inside the room's box (`snap(..., { flush: false })`); otherwise nudging 1 in away from a wall would snap straight back.
+- **`overlaps`, `insideRoom` (with `pointInPolygon`) and `findFreeSpot` came forward from P7** because adding from the catalog needs a free spot. `insideRoom` checks corners and also that no wall crosses the footprint; the second check matters for notched rooms (tested with a U-shape). P7 adds flat items' and clearance rules to the issues list.
+- **New items avoid door, closet and radiator zones as well as other items**, except flat items (rugs), which never collide (rule 3). A screenshot showed a new fridge landing against the radiator before this.
+- **The selected item gets a flat crimson frame on the floor**, not a line: WebGL draws lines 1 pixel wide whatever the zoom.
+- **The planner now has a fixed height** (window minus the navbar) and its panel scrolls inside. Before, the long panel stretched the page, so the 3D canvas resized, and the view jumped, every time the selection card appeared or disappeared. Found with real mouse events in headless Chrome.
+- **"In this room" lists every item as a button**, so items can be selected without a mouse (then R, arrows and Delete work). The selected one is marked with `aria-pressed`, a crimson edge and bold text, not colour alone.
+- **The tab icon is an inline SVG in `layout.html`** (shared), so browsers stop requesting `/favicon.ico`, whose 404 showed as a console error.
+- **Interaction was tested end to end with real mouse and keyboard events**, using a scratch script that drives headless Chrome over the DevTools protocol with Node's built-in WebSocket (not part of the project, no new dependency): find the bed by clicking, drag it, R, Shift + arrows, add a mini fridge, Delete, Escape, then check the panel and the console.

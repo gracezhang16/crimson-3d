@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { cameraOutsideWall, isConvexCorner } from "../static/js/planner/roomMath.js";
+import { arrowDirection, cameraOutsideWall, isConvexCorner } from "../static/js/planner/roomMath.js";
 
 // Clockwise on screen from the top-left corner, as in SPEC.md 4.1.
 const RECT = [[0, 0], [114, 0], [114, 150], [0, 150]];
@@ -55,4 +55,37 @@ test("L-shape from the south: the inner wall and the leg's south wall hide the r
   // 4 bottom of leg, 5 left.
   const hidden = L_SHAPE.map((_, i) => cameraOutsideWall(L_SHAPE, i, [40, 400]));
   assert.deepEqual(hidden, [false, false, true, false, true, false]);
+});
+
+
+const arrows = (forward) => Object.fromEntries(
+  ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].map((key) => [key, arrowDirection(key, forward)]),
+);
+
+test("looking north (camera south of the room), arrows match the compass", () => {
+  assert.deepEqual(arrows([0, -1]), {
+    ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
+  });
+});
+
+test("looking south (camera north of the room), arrows are reversed", () => {
+  assert.deepEqual(arrows([0, 1]), {
+    ArrowUp: [0, 1], ArrowDown: [0, -1], ArrowLeft: [1, 0], ArrowRight: [-1, 0],
+  });
+});
+
+test("looking east, up moves east and right moves south", () => {
+  assert.deepEqual(arrows([1, 0.2]), {
+    ArrowUp: [1, 0], ArrowDown: [-1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1],
+  });
+});
+
+test("from the default south-east view, up is north (the nearer axis)", () => {
+  // The camera sits south-east, looking north-west: more north than west.
+  assert.deepEqual(arrowDirection("ArrowUp", [-0.55, -1]), [0, -1]);
+});
+
+test("straight overhead, arrows fall back to the compass", () => {
+  assert.deepEqual(arrowDirection("ArrowUp", [0, 0]), [0, -1]);
+  assert.deepEqual(arrowDirection("ArrowRight", [0, 0]), [1, 0]);
 });

@@ -28,10 +28,37 @@
                     <span class="badge text-bg-warning align-self-start">Draft</span>
                 {% endif %}
             </section>
+            {# Filled by panel.js. Hidden until an item is selected. #}
+            <section id="selection" hidden>
+                <h2 class="planner-heading">Selected</h2>
+                <p class="mb-0 fw-semibold" id="selection-name"></p>
+                <p class="small text-body-secondary mb-1" id="selection-size"></p>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="rotate-button">Rotate 90°</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" id="delete-button">Delete</button>
+                </div>
+                <p class="small text-body-secondary mb-0">
+                    Drag to move. <kbd>R</kbd> turns, arrow keys nudge 1 in
+                    (<kbd>Shift</kbd> for 6 in), <kbd>Delete</kbd> removes, <kbd>Esc</kbd> deselects.
+                </p>
+            </section>
+            <section>
+                <h2 class="planner-heading">Harvard furniture</h2>
+                <div class="catalog-grid" id="catalog-harvard"></div>
+            </section>
+            <section>
+                <h2 class="planner-heading">Things to buy</h2>
+                <div class="catalog-grid" id="catalog-purchase"></div>
+            </section>
+            <section>
+                <h2 class="planner-heading">In this room <span id="room-item-count"></span></h2>
+                {# A button per item, so items can be selected with the keyboard too. #}
+                <ul class="list-unstyled mb-0 room-items" id="room-items"></ul>
+            </section>
             <section>
                 <h2 class="planner-heading">Moving around</h2>
                 <p class="small text-body-secondary mb-0">
-                    Drag to turn the room. Scroll or pinch to zoom.
+                    Drag the room to turn it. Scroll or pinch to zoom.
                     Right-drag or two-finger drag to slide the view.
                 </p>
             </section>
