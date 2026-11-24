@@ -21,7 +21,7 @@ import { OrbitControls } from "three/addons/OrbitControls.js";
 
 const FIELD_OF_VIEW = 35;           // degrees, top to bottom (SPEC.md 8.2)
 const MAX_PIXEL_RATIO = 2;          // sharper on retina screens, but capped for speed
-const BACKGROUND = 0xe2e6eb;        // matches .planner-scene in planner.css
+const BACKGROUND = 0x161318;        // near-black, matches .planner-scene in planner.css
 // The camera may tilt down to straight overhead (0) but stops just above the
 // horizon, so it never looks up from under the floor.
 const MAX_POLAR_ANGLE = Math.PI / 2 - 0.05;

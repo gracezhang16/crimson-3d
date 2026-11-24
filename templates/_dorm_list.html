@@ -1,17 +1,18 @@
-{# A list of dorms, each linking to its page. Included by index.html for both
-   the full list and search results. Expects `dorms`: rows with id, name,
+{# The dorms as cards, each linking to its page. Included by index.html for
+   both the full list and search results. Expects `dorms`: rows with id, name,
    yard and type_count. The leading _ marks a partial, not a whole page. #}
-<div class="list-group mb-4">
+<div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3 mb-4">
     {% for dorm in dorms %}
-        <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-           href="{{ url_for('pages.dorm', dorm_id=dorm.id) }}">
-            <span>
-                {{ dorm.name }}
-                {% if dorm.yard %}<span class="text-body-secondary small">· {{ dorm.yard }}</span>{% endif %}
-            </span>
-            <span class="badge text-bg-secondary rounded-pill">
-                {{ dorm.type_count }} room type{{ "s" if dorm.type_count != 1 }}
-            </span>
-        </a>
+        <div class="col">
+            <a class="dorm-card" href="{{ url_for('pages.dorm', dorm_id=dorm.id) }}">
+                <div class="d-flex justify-content-between align-items-start">
+                    <span class="dorm-card-name">{{ dorm.name }}</span>
+                    <span class="dorm-card-arrow" aria-hidden="true">→</span>
+                </div>
+                <div class="dorm-card-meta mt-1">
+                    {% if dorm.yard %}{{ dorm.yard }} · {% endif %}{{ dorm.type_count }} room type{{ "s" if dorm.type_count != 1 }}
+                </div>
+            </a>
+        </div>
     {% endfor %}
 </div>

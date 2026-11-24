@@ -1,5 +1,7 @@
 <!DOCTYPE html>
-<html lang="en">
+{# data-bs-theme="dark" switches Bootstrap to its dark mode; style.css tunes
+   the colours to near-black and crimson. #}
+<html lang="en" data-bs-theme="dark">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,6 +9,9 @@
     {# A tiny crimson square as the tab icon, written into the page so browsers
        don't request /favicon.ico (a 404 shows as an error in the console). #}
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23a51c30'/%3E%3C/svg%3E">
+    {# Preload the two main fonts so headings don't visibly switch font on load. #}
+    <link rel="preload" href="{{ url_for('static', filename='vendor/fonts/inter-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="{{ url_for('static', filename='vendor/fonts/fraunces-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
 
     <!-- Bootstrap is vendored (saved in static/) so the site works offline. -->
     <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
@@ -27,24 +32,37 @@
     </script>
 </head>
 <body class="d-flex flex-column min-vh-100">
-    <nav class="navbar navbar-expand-md navbar-dark bg-crimson">
+    {# `endpoint` names the current route (e.g. "pages.my_layouts") so the
+       matching navbar link can be marked as the current page. #}
+    {% set endpoint = request.endpoint or "" %}
+    <nav class="navbar navbar-expand-md c3-navbar sticky-top">
         <div class="container">
-            <a class="navbar-brand fw-semibold" href="{{ url_for('pages.index') }}">Crimson3D</a>
+            <a class="navbar-brand c3-brand" href="{{ url_for('pages.index') }}">
+                {# A small isometric cube: the "3D" in Crimson3D. Decorative only. #}
+                <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
+                    <path d="M13 2 23 7.5v11L13 24 3 18.5v-11Z" fill="#a51c30"/>
+                    <path d="M13 2 23 7.5 13 13 3 7.5Z" fill="#e2566b"/>
+                    <path d="M13 13v11l10-5.5v-11Z" fill="#7d1424"/>
+                </svg>
+                <span>Crimson<span class="accent">3D</span></span>
+            </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar"
                     aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbar">
                 <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('pages.index') }}">Dorms</a></li>
+                    <li class="nav-item"><a class="nav-link {{ 'active' if endpoint in ('pages.index', 'pages.dorm', 'pages.room_type') }}"
+                        href="{{ url_for('pages.index') }}" {% if endpoint == 'pages.index' %}aria-current="page"{% endif %}>Dorms</a></li>
                     {% if user %}
                         {# "My room" only for students an admin has assigned a room (SPEC.md 1). #}
                         {% if user.room_id %}
-                            <li class="nav-item"><a class="nav-link" href="{{ url_for('pages.my_room') }}">My room</a></li>
+                            <li class="nav-item"><a class="nav-link {{ 'active' if endpoint == 'pages.my_room' }}" href="{{ url_for('pages.my_room') }}">My room</a></li>
                         {% endif %}
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('pages.my_layouts') }}">My layouts</a></li>
+                        <li class="nav-item"><a class="nav-link {{ 'active' if endpoint == 'pages.my_layouts' }}"
+                            href="{{ url_for('pages.my_layouts') }}" {% if endpoint == 'pages.my_layouts' %}aria-current="page"{% endif %}>My layouts</a></li>
                         {% if user.role == "admin" %}
-                            <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.index') }}">Admin</a></li>
+                            <li class="nav-item"><a class="nav-link {{ 'active' if endpoint.startswith('admin.') }}" href="{{ url_for('admin.index') }}">Admin</a></li>
                         {% endif %}
                     {% endif %}
                 </ul>
@@ -77,7 +95,7 @@
         {% block main %}{% endblock %}
     </main>
 
-    <footer class="border-top py-3 text-center text-body-secondary small">
+    <footer class="c3-footer py-3 text-center small">
         <div class="container">
             Crimson3D is an unofficial student project and is not affiliated with Harvard University.
         </div>

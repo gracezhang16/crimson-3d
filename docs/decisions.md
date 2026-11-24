@@ -287,3 +287,13 @@ Technical choices:
 - **Issues are shown in words as well as orange**: the selection card and each "In this room" entry show "⚠ Blocks the door", and the status pill uses ✓ / ⚠ plus text, so colour is never the only signal (SPEC.md 11). The pill is `role="status"`, so screen readers announce changes.
 - **A node test runs both sample rooms' default layouts through `evaluate`** and expects no issues, so a seed edit that creates a clash fails the tests.
 - **Wall snapping (rule 7) was already done in P5.**
+
+## 2026-11-24 (Visual redesign, asked for by Grace)
+
+- **Look: near-black and crimson** (chosen over a crimson banner or an all-crimson background, which is tiring to read and clashes with the orange issue tints). Bootstrap runs in its built-in dark mode (`data-bs-theme="dark"` on `<html>`) and `style.css` overrides its colour variables, so forms, tables, cards, lists and alerts follow without per-component CSS.
+- **Contrast rule:** deep crimson `#a51c30` is only for fills, borders and buttons (white text on it is about 7:1). As text on the dark page it's too dark (about 2.6:1), so links and crimson text use `--crimson-bright` `#e2566b` (about 5:1). Muted text is `#a8a09c` (about 7:1).
+- **Fonts: Fraunces (headings) and Inter (text), vendored** in `static/vendor/fonts/` as variable `.woff2` files (about 130 KB total) with their SIL Open Font Licence files, like three.js and Bootstrap. Chosen over a Google Fonts link (a CDN, against CLAUDE.md, and broken offline at the showcase) and over system fonts (less distinctive, and they vary between Mac and Windows). Downloaded once from the `@fontsource-variable` packages on jsDelivr.
+- **The planner and builder follow the theme**: the 3D background is near-black (`scene.js` `BACKGROUND`), so the light room stands out; wall labels are dark chips; the builder's SVG preview is a dark drawing with light walls. The orange issue text was lightened to stay readable on the dark panel.
+- **The navbar height is now a token** (`--c3-nav-height`, 3.75rem), and the planner's fixed height uses it, so the two can't drift apart (the new navbar is taller than Bootstrap's default, which briefly made the planner run 3 px past the window).
+- **Home page**: a large serif headline, a big search box and dorm cards, plus a decorative isometric room drawing (inline SVG, `aria-hidden`, hidden below 992 px). The eyebrow says "For incoming first-years", not anything that could read as official.
+- **The current page is marked in the navbar** (underline plus `aria-current="page"`), using `request.endpoint` in `layout.html`.
