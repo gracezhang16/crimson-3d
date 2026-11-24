@@ -449,3 +449,45 @@ def test_plan_page_shows_drafts_to_admins(client):
 
 def test_other_pages_keep_the_container(client):
     assert '<main class="container py-4 flex-grow-1">' in client.get("/").get_data(as_text=True)
+
+
+# --- Planner ?layout= (P6) -----------------------------------------------------
+
+def test_plan_opens_own_saved_layout(client):
+    me = add_user()
+    layout_id = add_layout(me, "Single (sample)", "Mine")
+    log_in(client, me)
+    response = client.get(f"/plan/{type_id('Single (sample)')}?layout={layout_id}")
+    assert response.status_code == 200
+    assert f'data-layout-id="{layout_id}"' in response.get_data(as_text=True)
+
+
+def test_plan_layout_needs_login(client):
+    layout_id = add_layout(add_user(), "Single (sample)", "Mine")
+    response = client.get(f"/plan/{type_id('Single (sample)')}?layout={layout_id}")
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/login"
+
+
+def test_plan_someone_elses_layout_is_403(client):
+    layout_id = add_layout(add_user("owner@example.com"), "Single (sample)", "Theirs")
+    log_in(client, add_user("other@example.com"))
+    assert client.get(f"/plan/{type_id('Single (sample)')}?layout={layout_id}").status_code == 403
+
+
+def test_plan_layout_for_another_room_or_missing_is_404(client):
+    me = add_user()
+    layout_id = add_layout(me, "Double (sample)", "For the double")
+    log_in(client, me)
+    single = type_id("Single (sample)")
+    assert client.get(f"/plan/{single}?layout={layout_id}").status_code == 404
+    assert client.get(f"/plan/{single}?layout=9999").status_code == 404
+    assert client.get(f"/plan/{single}?layout=abc").status_code == 404
+
+
+def test_plan_default_layout_id_is_403_for_students(client):
+    default_id = db.execute(
+        "SELECT id FROM layouts WHERE room_type_id = ? AND user_id IS NULL", type_id("Single (sample)")
+    )[0]["id"]
+    log_in(client, add_user())
+    assert client.get(f"/plan/{type_id('Single (sample)')}?layout={default_id}").status_code == 403

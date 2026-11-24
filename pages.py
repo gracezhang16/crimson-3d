@@ -162,7 +162,10 @@ def plan(type_id):
     The page passes everything the JavaScript needs through data-* attributes
     on #planner (SPEC.md 8.1); the planner then loads the room itself from
     /api/types/<id>. Drafts give the same 404 as on the facts page.
-    ?layout=<id> (open a saved layout, owner only) arrives in P6.
+
+    ?layout=<id> opens one of the student's saved layouts (owner only,
+    SPEC.md 7.1): logged out goes to /login, someone else's layout is 403,
+    and a missing layout or one for a different room is 404.
     """
     rows = db.execute(
         "SELECT room_types.id, room_types.name, room_types.status, "
@@ -173,7 +176,20 @@ def plan(type_id):
     )
     if not rows:
         return apology("We couldn't find that room type.", 404)
-    return render_template("plan.html", room_type=rows[0], layout_id="", mode="edit")
+
+    layout_id = request.args.get("layout", type=int)
+    if "layout" in request.args:
+        if session.get("user_id") is None:
+            return redirect("/login")
+        layouts = db.execute(
+            "SELECT user_id FROM layouts WHERE id = ? AND room_type_id = ?", layout_id, type_id
+        )
+        if layout_id is None or not layouts:
+            return apology("We couldn't find that layout.", 404)
+        if layouts[0]["user_id"] != session["user_id"]:
+            return apology("That layout belongs to someone else.", 403)
+
+    return render_template("plan.html", room_type=rows[0], layout_id=layout_id or "", mode="edit")
 
 
 # ---------------------------------------------------------------------------

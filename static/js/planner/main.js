@@ -2,10 +2,10 @@
  * Planner entry point (SPEC.md 8.1): read the page's data-* attributes, load
  * the room, build the scene and wire the modules together.
  *
- * P5: the room (floor, walls with dollhouse stubs, wall features, door zones,
- * wall labels) and its default furniture, loaded from /api/types/<id> and
- * /api/furniture; furniture can be selected, dragged, turned, nudged, deleted
- * and added from the catalog. Saving arrives in P6.
+ * P6: the room (floor, walls with dollhouse stubs, wall features, door zones,
+ * wall labels) with its default furniture, or a saved layout (?layout=<id>);
+ * furniture can be selected, dragged, turned, nudged, deleted and added from
+ * the catalog; logged-in students can save, save as new and rename.
  */
 
 import { apiFetch } from "../shared/api.js";
@@ -14,6 +14,7 @@ import { createWallLabels } from "./labels.js";
 import { createLayout } from "./layout.js";
 import { createPanel } from "./panel.js";
 import { buildRoom } from "./room.js";
+import { createSaveControls } from "./saving.js";
 import { createScene, webglAvailable } from "./scene.js";
 
 const NO_WEBGL_MESSAGE =
@@ -60,11 +61,13 @@ function showMessage(canvas, text) {
 async function start(canvas, config) {
   let roomType;
   let catalog;
+  let saved = null;
   try {
-    // Promise.all starts both requests at once and waits for both to finish.
-    [roomType, catalog] = await Promise.all([
+    // Promise.all starts the requests at once and waits for all of them.
+    [roomType, catalog, saved] = await Promise.all([
       apiFetch(`/api/types/${config.typeId}`),
       apiFetch("/api/furniture"),
+      config.layoutId ? apiFetch(`/api/layouts/${config.layoutId}`) : null,
     ]);
   } catch (error) {
     showMessage(canvas, `Couldn't load this room: ${error.message}`);
@@ -78,10 +81,14 @@ async function start(canvas, config) {
   view.scene.add(room.group);
 
   const layout = createLayout(roomType.geometry, catalogById, view.scene, view.requestRender);
-  layout.load(roomType.default_layout.placements);
+  // A saved layout if one was asked for, otherwise the room's default.
+  layout.load(saved ? saved.placements : roomType.default_layout.placements);
   if (config.mode !== "view") {
     attachInteraction({ canvas, camera: view.camera, controls: view.controls, layout });
     createPanel(layout, catalog);
+  }
+  if (config.mode === "edit" && config.loggedIn) {
+    createSaveControls(config, layout, saved ? saved.name : "My layout");
   }
 
   const labels = createWallLabels(container, room.walls);

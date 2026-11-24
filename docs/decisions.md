@@ -251,3 +251,19 @@ Technical choices:
 - **"In this room" lists every item as a button**, so items can be selected without a mouse (then R, arrows and Delete work). The selected one is marked with `aria-pressed`, a crimson edge and bold text, not colour alone.
 - **The tab icon is an inline SVG in `layout.html`** (shared), so browsers stop requesting `/favicon.ico`, whose 404 showed as a console error.
 - **Interaction was tested end to end with real mouse and keyboard events**, using a scratch script that drives headless Chrome over the DevTools protocol with Node's built-in WebSocket (not part of the project, no new dependency): find the bed by clicking, drag it, R, Shift + arrows, add a mini fridge, Delete, Escape, then check the panel and the console.
+
+## 2026-11-24 (P6, built for Claire with the team's agreement)
+
+Product choices confirmed by Grace:
+
+- **"Save as new" uses the name box, adding " (copy)" if the name wasn't changed**, so the two don't look identical in the list (`saving.nameForCopy`, tested). Alternative: a pop-up asking for a name.
+- **Logged-out visitors get no "Leave site?" warning.** They can't save, and the warning would also fire on clicking "Log in". The panel says "Log in to save this layout". Keeping their changes across login (in browser storage) is a possible later improvement.
+
+Technical choices:
+
+- **`/plan/<id>?layout=<id>` checks ownership on the server** (SPEC.md 7.1, 12): logged out → `/login`, another student's layout (including a default layout) → 403, missing or for another room → 404. The JavaScript then loads it from `GET /api/layouts/<id>`, which checks ownership again.
+- **One Save button covers saving and renaming**: an open layout is updated with `PUT` (name and placements together); a new one is created with `POST`. After the first save, the address becomes `?layout=<id>` via `history.replaceState` (no reload), so reloading or bookmarking reopens it.
+- **"Unsaved changes" follows furniture changes and name edits, not selection.** `layout.js` now tells listeners `{ content: true | false }`, so clicking an item doesn't mark the layout unsaved. While it shows, `beforeunload` makes the browser ask before leaving.
+- **The layout controls sit near the top of the panel**, not after the catalogue as SPEC.md 8.6 lists them, because the panel now scrolls and Save would otherwise be out of sight.
+- **Placements are sent in the SPEC.md 4.4 shape** (`placementForSaving`): catalog items send id, centre and rotation; custom items also send label and size; positions are whole inches.
+- **Tested end to end in headless Chrome with real input**: register, drag the bed, Save (URL changes, database has the new position), reload (bed comes back), rename, Save as new, then a change plus navigation triggers the browser's leave warning.

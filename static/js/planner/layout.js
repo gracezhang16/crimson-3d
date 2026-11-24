@@ -3,8 +3,10 @@
  *
  * This is the single source of truth: every change (add, move, turn,
  * delete, select) goes through these functions, which update the 3D scene
- * and then tell every listener (the side panel now; the "Unsaved changes"
- * note in P6) that something changed.
+ * and then tell every listener (the side panel, the save controls) what
+ * changed: { content: true } when the furniture itself changed (so there is
+ * something new to save), { content: false } for selection-only changes and
+ * for loading.
  *
  * Each entry is { placement, item, group }: the placement in the SPEC.md
  * 4.4 format, the item's size and colour (rules.itemDimensions), and its
@@ -35,11 +37,14 @@ export function createLayout(geometry, catalogById, scene, requestRender) {
   let selected = null;
   const listeners = [];
 
-  /** Tell the scene and every listener that something changed. */
-  function changed() {
+  /**
+   * Tell the scene and every listener that something changed.
+   * @param {boolean} content - true if the furniture changed, not just the selection
+   */
+  function changed(content) {
     updateSelectionOutline(outlineMesh, selected);
     requestRender();
-    listeners.forEach((listener) => listener());
+    listeners.forEach((listener) => listener({ content }));
   }
 
   /**
@@ -85,7 +90,7 @@ export function createLayout(geometry, catalogById, scene, requestRender) {
     /** @returns {object | null} the selected entry */
     selected: () => selected,
 
-    /** @param {() => void} listener - called after every change */
+    /** @param {(change: {content: boolean}) => void} listener - called after every change */
     onChange(listener) {
       listeners.push(listener);
     },
@@ -99,7 +104,7 @@ export function createLayout(geometry, catalogById, scene, requestRender) {
       entries = [];
       selected = null;
       placements.forEach((placement) => addEntry({ ...placement }));
-      changed();
+      changed(false);
     },
 
     /**
@@ -110,14 +115,14 @@ export function createLayout(geometry, catalogById, scene, requestRender) {
       const item = itemDimensions({ furniture_id: catalogItem.id }, catalogById);
       const spot = findFreeSpot(item, 0, outline, blockers());
       selected = addEntry({ furniture_id: catalogItem.id, x: spot.x, y: spot.y, rotation: 0 });
-      changed();
+      changed(true);
     },
 
     /** @param {object | null} entry */
     select(entry) {
       if (entry !== selected) {
         selected = entry;
-        changed();
+        changed(false);
       }
     },
 
@@ -136,7 +141,7 @@ export function createLayout(geometry, catalogById, scene, requestRender) {
       entry.placement.x = spot.x;
       entry.placement.y = spot.y;
       entry.group.position.set(spot.x, 0, spot.y);
-      changed();
+      changed(true);
     },
 
     /**
@@ -148,7 +153,7 @@ export function createLayout(geometry, catalogById, scene, requestRender) {
       placement.rotation = (placement.rotation + 90) % 360;
       Object.assign(placement, snap(placement, entry.item, placement.rotation, outline, { flush: false }));
       rebuild(entry);
-      changed();
+      changed(true);
     },
 
     /** @param {object} entry */
@@ -158,8 +163,11 @@ export function createLayout(geometry, catalogById, scene, requestRender) {
       if (selected === entry) {
         selected = null;
       }
-      changed();
+      changed(true);
     },
+
+    /** @returns {object[]} the placements, in the order they were placed */
+    placements: () => entries.map((entry) => entry.placement),
 
     /** @returns {THREE.Object3D[]} what the pointer can pick */
     pickables: () => furniture.children,

@@ -90,6 +90,6 @@ export function createPanel(layout, catalog) {
     }));
   }
 
-  layout.onChange(refresh);
+  layout.onChange(() => refresh());
   refresh();
 }

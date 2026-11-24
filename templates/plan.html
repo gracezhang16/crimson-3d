@@ -28,6 +28,39 @@
                     <span class="badge text-bg-warning align-self-start">Draft</span>
                 {% endif %}
             </section>
+            {# Layout controls (SPEC.md 8.6), placed near the top so Save is in view
+               without scrolling the panel. saving.js wires them up. #}
+            <section id="layout-controls">
+                {% if mode == "admin-default" %}
+                    <h2 class="planner-heading">Default layout</h2>
+                    <p class="small text-body-secondary mb-1">Visitors see this arrangement first when they open the room.</p>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-sm btn-crimson" id="save-default-button">Save default layout</button>
+                        <span id="save-status" class="small" aria-live="polite"></span>
+                    </div>
+                    <p id="save-error" class="small text-danger mb-0" role="alert" hidden></p>
+                {% elif user %}
+                    <h2 class="planner-heading">Your layout</h2>
+                    <label for="layout-name" class="form-label small mb-0">Name</label>
+                    <input id="layout-name" class="form-control form-control-sm" maxlength="60" autocomplete="off">
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <button type="button" class="btn btn-sm btn-crimson" id="save-button">Save</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="save-as-new-button">Save as new</button>
+                        <span id="save-status" class="small" aria-live="polite"></span>
+                    </div>
+                    <p id="save-error" class="small text-danger mb-0" role="alert" hidden></p>
+                    <p class="small mb-0 mt-1">Your layouts for this room:</p>
+                    <ul class="small mb-0 ps-3" id="saved-layouts"></ul>
+                {% else %}
+                    <h2 class="planner-heading">Your layout</h2>
+                    <p class="small mb-0">
+                        <a href="{{ url_for('pages.login') }}">Log in to save this layout</a>
+                        or <a href="{{ url_for('pages.register') }}">create an account</a>.
+                        You can move furniture without one, but it won't be kept.
+                    </p>
+                {% endif %}
+            </section>
+
             {# Filled by panel.js. Hidden until an item is selected. #}
             <section id="selection" hidden>
                 <h2 class="planner-heading">Selected</h2>
