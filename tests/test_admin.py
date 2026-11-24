@@ -99,6 +99,8 @@ def test_builder_form_has_every_field_with_a_label(client):
     assert 'name="geometry"' in page                       # hidden field for A4
     assert 'value="rectangle" checked' in page and 'value="walls"' in page
     assert '<template id="wall-row-template">' in page
+    assert 'id="features-table"' in page and '<template id="feature-template">' in page
+    assert 'data-action="add-feature"' in page
     assert "/static/js/builder/main.js" in page
 
 

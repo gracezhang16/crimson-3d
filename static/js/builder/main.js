@@ -1,7 +1,8 @@
 /**
  * Room builder page (templates/admin/room_type_form.html). Hannah.
  *
- * Form state -> room-format object -> live SVG preview, on every keystroke.
+ * Form state (shape, walls, features) -> room-format object -> live SVG
+ * preview and inline errors, on every keystroke.
  * The pure parts live in state.js (form values -> geometry) and preview.js
  * (geometry -> SVG); this file only reads the form and wires them together.
  *
@@ -12,7 +13,17 @@
 import { formatFeetInches } from "../shared/units.js";
 import { wallLetter } from "../shared/geometry.js";
 import { drawPreview } from "./preview.js";
-import { buildGeometry, parseInches, rectangleWalls, wallProblem } from "./state.js";
+import { buildGeometry, featureFromValues, parseInches, rectangleWalls, wallProblem } from "./state.js";
+
+// Which number boxes each kind of feature uses (SPEC.md 4.2); the rest are
+// disabled. Offset is always used.
+const FEATURE_FIELDS = {
+  door: ["width", "height"],
+  window: ["width", "height", "sill"],
+  closet: ["width", "height"],
+  radiator: ["width", "height", "depth"],
+  outlet: [],
+};
 
 const form = document.querySelector("#room-type-form");
 const svg = document.querySelector("#preview");
@@ -21,6 +32,8 @@ const rectangleFields = document.querySelector("#rectangle-fields");
 const wallFields = document.querySelector("#wall-fields");
 const wallRows = document.querySelector("#wall-rows");
 const rowTemplate = document.querySelector("#wall-row-template");
+const featuresTable = document.querySelector("#features-table");
+const featureTemplate = document.querySelector("#feature-template");
 
 /**
  * @returns {{direction: string, length: number}[]} the wall table, row by row
@@ -56,7 +69,78 @@ function readForm() {
     length: parseInches(field("length").value),
     walls: readWalls(),
     ceiling: parseInches(field("ceiling").value),
+    features: readFeatures(),
   };
+}
+
+/**
+ * @returns {HTMLTableSectionElement[]} one <tbody class="feature"> per feature
+ */
+function featureBodies() {
+  return [...featuresTable.querySelectorAll("tbody.feature")];
+}
+
+/**
+ * Read the features table into feature objects (see featureFromValues).
+ * @returns {object[]}
+ */
+function readFeatures() {
+  return featureBodies().map((body) => {
+    const number = (name) => parseInches(body.querySelector(`[data-field="${name}"]`).value);
+    const wall = body.querySelector(".feature-wall").value;
+    return featureFromValues({
+      kind: body.querySelector(".feature-kind").value,
+      wall: wall === "" ? NaN : Number(wall),
+      offset: number("offset"),
+      width: number("width"),
+      height: number("height"),
+      sill: number("sill"),
+      depth: number("depth"),
+    });
+  });
+}
+
+/** Add an empty feature row (a door on wall A), cloned from the <template>. */
+function addFeature() {
+  featuresTable.append(featureTemplate.content.firstElementChild.cloneNode(true));
+}
+
+/**
+ * Keep each feature's wall list in step with the shape (A, B, C... for
+ * however many walls there are), enable only the boxes its kind uses, and
+ * show its problems in red underneath.
+ *
+ * @param {number} wallCount
+ * @param {string[][]} featureErrors - from buildGeometry()
+ */
+function refreshFeatures(wallCount, featureErrors) {
+  featureBodies().forEach((body, i) => {
+    const select = body.querySelector(".feature-wall");
+    const chosen = select.value === "" ? 0 : Number(select.value);
+    const expectedOptions = chosen >= wallCount ? wallCount + 1 : wallCount;
+    if (select.options.length !== expectedOptions) {
+      select.replaceChildren();
+      for (let wall = 0; wall < wallCount; wall++) {
+        select.append(new Option(wallLetter(wall), wall));
+      }
+      // A wall that was deleted from the shape stays selected, so the row
+      // shows an error instead of silently moving to another wall.
+      if (chosen >= wallCount) {
+        select.append(new Option(`${wallLetter(chosen)} (removed)`, chosen));
+      }
+      select.value = chosen;
+    }
+
+    const used = FEATURE_FIELDS[body.querySelector(".feature-kind").value];
+    for (const input of body.querySelectorAll("[data-field]")) {
+      input.disabled = input.dataset.field !== "offset" && !used.includes(input.dataset.field);
+    }
+
+    const problems = featureErrors[i] ?? [];
+    body.querySelector(".feature-inputs").classList.toggle("table-danger", problems.length > 0);
+    body.querySelector(".feature-error-row").hidden = problems.length === 0;
+    body.querySelector(".feature-error").textContent = problems.join(" ");
+  });
 }
 
 /**
@@ -120,13 +204,15 @@ function showStatus(geometry, errors) {
 /** Rebuild the geometry from the form and redraw everything. */
 function update() {
   const values = readForm();
-  const { geometry, errors, openEnd } = buildGeometry(values);
+  const { geometry, errors, openEnd, featureErrors } = buildGeometry(values);
   if (values.shape === "walls") {
     refreshRows(values.walls);
   }
+  const wallCount = values.shape === "walls" ? values.walls.length : 4;
+  refreshFeatures(wallCount, featureErrors);
   status.className = "mt-2 small";
   showStatus(geometry, errors);
-  drawPreview(svg, geometry, openEnd);
+  drawPreview(svg, geometry, openEnd, featureErrors);
   // Only a complete, valid room goes into the hidden field the server reads (A4).
   field("geometry").value = errors.length ? "" : JSON.stringify(geometry);
 }
@@ -163,6 +249,13 @@ form.addEventListener("click", (event) => {
     update();
   } else if (button?.dataset.action === "remove-wall") {
     button.closest("tr").remove();
+    update();
+  } else if (button?.dataset.action === "add-feature") {
+    addFeature();
+    update(); // fills in the new row's wall list before focusing it
+    featureBodies().at(-1).querySelector('[data-field="offset"]').focus();
+  } else if (button?.dataset.action === "remove-feature") {
+    button.closest("tbody").remove();
     update();
   }
 });

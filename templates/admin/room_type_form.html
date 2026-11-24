@@ -2,7 +2,7 @@
 
 {# The room builder (Hannah), SPEC.md 9.1. builder/main.js turns the form into
    the room format, draws the live preview and fills the hidden "geometry"
-   field. A2: shape and details. A3 adds the features table, A4 saving. #}
+   field. A2: shape and details. A3: features table. A4 adds saving. #}
 
 {% block title %}New room type · Admin{% endblock %}
 
@@ -21,7 +21,7 @@
         <input type="hidden" name="geometry" value="">
 
         <div class="row g-4">
-            <div class="col-lg-6">
+            <div class="col-lg-7">
                 <h2 class="h5">Room</h2>
                 <div class="row g-3 mb-4">
                     <div class="col-sm-6">
@@ -108,6 +108,31 @@
                     </div>
                 </div>
 
+                <h2 class="h5">Doors, windows and more</h2>
+                <p class="small text-body-secondary mb-2">
+                    Measure each distance along the wall from its <strong>left corner</strong> as you
+                    stand inside the room facing that wall (the red arrows in the preview) to the
+                    nearer edge of the door or window. All sizes in inches.
+                </p>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-2 features-table" id="features-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Kind</th>
+                                <th scope="col">Wall</th>
+                                <th scope="col">From left corner</th>
+                                <th scope="col">Width</th>
+                                <th scope="col">Height</th>
+                                <th scope="col">Sill</th>
+                                <th scope="col">Depth</th>
+                                <th scope="col"><span class="visually-hidden">Remove</span></th>
+                            </tr>
+                        </thead>
+                        {# main.js appends one <tbody> per feature, from #feature-template. #}
+                    </table>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-secondary mb-4" data-action="add-feature">Add feature</button>
+
                 <h2 class="h5">Measurement</h2>
                 <div class="row g-3 mb-3">
                     <div class="col-sm-6">
@@ -126,13 +151,16 @@
                 <p class="small text-body-secondary">Saving is added in milestone A4.</p>
             </div>
 
-            <div class="col-lg-6">
+            <div class="col-lg-5">
                 <div class="builder-preview sticky-lg-top">
                     <h2 class="h5">Preview</h2>
                     <svg id="preview" class="border rounded w-100" role="img"
                          aria-label="Floor plan of the room, drawn to scale"></svg>
                     {# Live summary or problems, announced to screen readers as they change. #}
                     <div id="preview-status" class="mt-2 small" aria-live="polite"></div>
+                    <p class="small text-body-secondary mt-2 mb-0">
+                        Red arrows mark each wall's left corner, where its distances are measured from.
+                    </p>
                 </div>
             </div>
         </div>
@@ -164,6 +192,42 @@
                         aria-label="Remove wall">×</button>
             </td>
         </tr>
+    </template>
+    {# One feature: its inputs, plus a second row for its problems (hidden when
+       there are none). Each feature is its own <tbody> so the two rows stay
+       together; a table may have several. #}
+    <template id="feature-template">
+        <tbody class="feature">
+            <tr class="feature-inputs">
+                <td>
+                    <select class="form-select form-select-sm feature-kind" aria-label="Kind">
+                        <option value="door">Door</option>
+                        <option value="window">Window</option>
+                        <option value="closet">Closet</option>
+                        <option value="radiator">Radiator</option>
+                        <option value="outlet">Outlet</option>
+                    </select>
+                </td>
+                <td><select class="form-select form-select-sm feature-wall" aria-label="Wall"></select></td>
+                <td><input class="form-control form-control-sm feature-number" data-field="offset" type="number"
+                           min="0" step="1" inputmode="numeric" aria-label="Distance from the wall's left corner, inches"></td>
+                <td><input class="form-control form-control-sm feature-number" data-field="width" type="number"
+                           min="1" step="1" inputmode="numeric" aria-label="Width, inches" placeholder="34"></td>
+                <td><input class="form-control form-control-sm feature-number" data-field="height" type="number"
+                           min="1" step="1" inputmode="numeric" aria-label="Height, inches" placeholder="80"></td>
+                <td><input class="form-control form-control-sm feature-number" data-field="sill" type="number"
+                           min="0" step="1" inputmode="numeric" aria-label="Sill height above the floor, inches (windows)"></td>
+                <td><input class="form-control form-control-sm feature-number" data-field="depth" type="number"
+                           min="1" step="1" inputmode="numeric" aria-label="Depth from the wall, inches (radiators)" placeholder="6"></td>
+                <td class="text-end">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-action="remove-feature"
+                            aria-label="Remove feature">×</button>
+                </td>
+            </tr>
+            <tr class="feature-error-row table-danger" hidden>
+                <td colspan="8" class="small feature-error"></td>
+            </tr>
+        </tbody>
     </template>
 {% endblock %}
 

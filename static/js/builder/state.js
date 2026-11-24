@@ -15,7 +15,7 @@
  * geometry.validate_room() when the form is saved (A4).
  */
 
-import { signedArea, wallLetter } from "../shared/geometry.js";
+import { signedArea, wallLength, wallLetter } from "../shared/geometry.js";
 
 // One step of 1 inch in each direction, in plan coordinates (y points south).
 export const DIRECTIONS = {
@@ -31,6 +31,10 @@ const MIN_CEILING = 72;
 const MAX_CEILING = 240;
 const MIN_WALLS = 4; // at right angles, a closed room needs at least four walls
 const MAX_WALLS = 12;
+const MAX_FEATURES = 40;
+const EPSILON = 1e-9; // as in geometry.py: diagonal wall lengths aren't whole numbers
+
+export const FEATURE_KINDS = ["door", "window", "closet", "radiator", "outlet"];
 
 /**
  * Turn what was typed in a length box into whole inches, or NaN if it isn't
@@ -182,16 +186,161 @@ export function rectangleWalls(width, length) {
   ];
 }
 
+// ---------------------------------------------------------------------------
+// Features (A3). featureProblems() mirrors geometry.py's _validate_features,
+// message for message, so the builder shows exactly what the server would
+// say on save. tests/fixtures/feature_cases.json holds cases both test
+// suites check, so the two can't drift apart unnoticed.
+// ---------------------------------------------------------------------------
+
+/**
+ * Build one feature object from a table row, with only the keys its kind
+ * uses (SPEC.md 4.2). Required numbers that are missing stay as NaN so
+ * validation reports them; a radiator's optional height and depth are left
+ * out when empty.
+ *
+ * @param {{kind: string, wall: number, offset: number, width: number,
+ *   height: number, sill: number, depth: number}} values - numbers or NaN
+ * @returns {object}
+ */
+export function featureFromValues({ kind, wall, offset, width, height, sill, depth }) {
+  const feature = { kind, wall, offset };
+  if (kind === "outlet") {
+    return feature;
+  }
+  feature.width = width;
+  if (kind === "radiator") {
+    if (!Number.isNaN(height)) feature.height = height;
+    if (!Number.isNaN(depth)) feature.depth = depth;
+    return feature;
+  }
+  feature.height = height;
+  if (kind === "window") {
+    feature.sill = sill;
+  }
+  return feature;
+}
+
+/**
+ * A wall length for a message: "114 in", or "141.4 in" for a diagonal wall.
+ * @param {number} length
+ * @returns {string}
+ */
+function inchesText(length) {
+  return Number.isInteger(length) ? `${length} in` : `${length.toFixed(1)} in`;
+}
+
+/**
+ * What's wrong with each feature, given a valid outline.
+ *
+ * @param {number[][]} outline
+ * @param {object[]} features
+ * @param {number} ceiling - a valid ceiling, or 240 when the ceiling is invalid
+ * @returns {{general: string[], perFeature: string[][]}} perFeature[i] lists
+ *   feature i's problems (so its table row can show them)
+ */
+export function featureProblems(outline, features, ceiling) {
+  if (features.length > MAX_FEATURES) {
+    return { general: [`A room can have at most ${MAX_FEATURES} features.`], perFeature: features.map(() => []) };
+  }
+  const counts = {}; // numbers features per kind, so messages say "Window 2"
+  const perFeature = features.map((feature) => {
+    if (!FEATURE_KINDS.includes(feature.kind)) {
+      return [`Unknown feature kind '${feature.kind}'; use one of ${FEATURE_KINDS.join(", ")}.`];
+    }
+    counts[feature.kind] = (counts[feature.kind] ?? 0) + 1;
+    const name = `${feature.kind[0].toUpperCase()}${feature.kind.slice(1)} ${counts[feature.kind]}`;
+    return validateFeature(outline, feature, name, ceiling);
+  });
+  return { general: [], perFeature };
+}
+
+/**
+ * Problems with one feature (geometry.py: _validate_feature).
+ * @returns {string[]}
+ */
+function validateFeature(outline, feature, name, ceiling) {
+  const n = outline.length;
+  const { kind, wall, offset } = feature;
+  if (!Number.isInteger(wall) || wall < 0 || wall >= n) {
+    return [`${name} must be on a wall from A to ${wallLetter(n - 1)}.`];
+  }
+  const letter = wallLetter(wall);
+  const length = wallLength(outline, wall);
+  if (!Number.isInteger(offset) || offset < 0) {
+    return [`${name} needs a distance from the corner of 0 in or more.`];
+  }
+
+  const errors = [];
+  if (kind === "outlet") {
+    if (offset > length + EPSILON) {
+      errors.push(`${name} is past the end of wall ${letter} (${offset} in on a ${inchesText(length)} wall).`);
+    }
+  } else {
+    const { width } = feature;
+    if (!Number.isInteger(width) || width < 1) {
+      errors.push(`${name} needs a width of 1 in or more.`);
+    } else if (offset + width > length + EPSILON) {
+      errors.push(width > length + EPSILON
+        ? `${name} is wider than wall ${letter} (${width} in on a ${inchesText(length)} wall).`
+        : `${name} runs past the end of wall ${letter} (${offset} + ${width} in on a ${inchesText(length)} wall).`);
+    }
+  }
+
+  errors.push(...validateHeights(feature, name, ceiling));
+
+  if (kind === "radiator" && "depth" in feature) {
+    if (!Number.isInteger(feature.depth) || feature.depth < 1) {
+      errors.push(`${name} needs a depth of 1 in or more.`);
+    }
+  }
+  return errors;
+}
+
+/**
+ * Problems with a feature's height and, for windows, sill
+ * (geometry.py: _validate_heights).
+ * @returns {string[]}
+ */
+function validateHeights(feature, name, ceiling) {
+  const { kind, height, sill } = feature;
+  if (kind === "outlet") {
+    return []; // outlets are always drawn at 12 in
+  }
+  const heightRequired = ["door", "window", "closet"].includes(kind);
+  if (!("height" in feature) && !heightRequired) {
+    return []; // a radiator may leave out its height
+  }
+  if (!Number.isInteger(height) || height < 1) {
+    return [`${name} needs a height of 1 in or more.`];
+  }
+  if (kind !== "window") {
+    return height > ceiling
+      ? [`${name} is taller than the ceiling (${height} in under a ${ceiling} in ceiling).`]
+      : [];
+  }
+  if (!Number.isInteger(sill) || sill < 0) {
+    return [`${name} needs a sill height of 0 in or more.`];
+  }
+  if (sill + height > ceiling) {
+    return [`${name} reaches above the ceiling (sill ${sill} in + height ${height} in under a ${ceiling} in ceiling).`];
+  }
+  return [];
+}
+
 /**
  * Build the room-format object from the form's values.
  *
  * @param {{shape: "rectangle" | "walls", width: number, length: number,
- *   walls: {direction: string, length: number}[], ceiling: number}} values
- * @returns {{geometry: object | null, errors: string[], openEnd: number[] | null}}
+ *   walls: {direction: string, length: number}[], ceiling: number,
+ *   features?: object[]}} values - features as made by featureFromValues()
+ * @returns {{geometry: object | null, errors: string[], openEnd: number[] | null,
+ *   featureErrors: string[][]}}
  *   geometry is null when there is no outline to draw. Only save it when
- *   errors is empty. openEnd: see outlineFromWalls().
+ *   errors is empty. openEnd: see outlineFromWalls(). featureErrors[i] lists
+ *   feature i's problems (empty until the outline itself is valid).
  */
-export function buildGeometry({ shape, width, length, walls, ceiling }) {
+export function buildGeometry({ shape, width, length, walls, ceiling, features = [] }) {
   const errors = [];
   let outline = null;
   let openEnd = null;
@@ -209,10 +358,21 @@ export function buildGeometry({ shape, width, length, walls, ceiling }) {
     if (widthOk && lengthOk) outline = rectangleOutline(width, length);
   }
 
-  if (!isWholeBetween(ceiling, MIN_CEILING, MAX_CEILING)) {
+  const outlineOk = outline !== null && errors.length === 0;
+  const ceilingOk = isWholeBetween(ceiling, MIN_CEILING, MAX_CEILING);
+  if (!ceilingOk) {
     errors.push(`Ceiling must be a whole number from ${MIN_CEILING} to ${MAX_CEILING} in.`);
   }
 
-  const geometry = outline && { version: 1, units: "in", ceiling, outline, features: [] };
-  return { geometry, errors, openEnd };
+  // As on the server, features are only checked against a good outline, and
+  // against the highest allowed ceiling while the ceiling itself is invalid.
+  let featureErrors = features.map(() => []);
+  if (outlineOk) {
+    const result = featureProblems(outline, features, ceilingOk ? ceiling : MAX_CEILING);
+    featureErrors = result.perFeature;
+    errors.push(...result.general, ...result.perFeature.flat());
+  }
+
+  const geometry = outline && { version: 1, units: "in", ceiling, outline, features };
+  return { geometry, errors, openEnd, featureErrors };
 }

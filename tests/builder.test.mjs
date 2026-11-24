@@ -3,16 +3,19 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   buildGeometry,
+  featureFromValues,
+  featureProblems,
   outlineFromWalls,
   parseInches,
   rectangleOutline,
   rectangleWalls,
   wallProblem,
 } from "../static/js/builder/state.js";
-import { labelAnchor, labelPoint, previewBox, wallSegments } from "../static/js/builder/preview.js";
+import { featureRect, labelAnchor, labelPoint, previewBox, wallSegments } from "../static/js/builder/preview.js";
 
 const wall = (direction, length) => ({ direction, length });
 
@@ -176,4 +179,85 @@ test("labelPoint is outside the inner wall of an L-shape too", () => {
 test("labelAnchor keeps side labels off their wall", () => {
   const anchors = wallSegments(rectangleOutline(100, 50)).map(labelAnchor);
   assert.deepEqual(anchors, ["middle", "start", "middle", "end"]);   // N, E, S, W
+});
+
+
+// --- Features (A3) ---------------------------------------------------------------
+
+// The same cases tests/test_geometry.py checks against geometry.validate_room,
+// so the builder's inline errors match the server's word for word.
+const { cases: FEATURE_CASES } = JSON.parse(
+  readFileSync(new URL("./fixtures/feature_cases.json", import.meta.url), "utf8"),
+);
+const RECT_114 = [[0, 0], [114, 0], [114, 150], [0, 150]];
+
+for (const testCase of FEATURE_CASES) {
+  test(`shared feature case: ${testCase.name}`, () => {
+    const features = testCase.features === "41 outlets"
+      ? Array(41).fill({ kind: "outlet", wall: 0, offset: 1 })
+      : testCase.features;
+    const { general, perFeature } = featureProblems(testCase.outline ?? RECT_114, features, 102);
+    assert.deepEqual([...general, ...perFeature.flat()], testCase.expected);
+  });
+}
+
+test("featureProblems lists problems per feature, for the table rows", () => {
+  const { perFeature } = featureProblems(RECT_114, [
+    { kind: "outlet", wall: 0, offset: 10 },
+    { kind: "outlet", wall: 0, offset: 500 },
+  ], 102);
+  assert.deepEqual(perFeature[0], []);
+  assert.match(perFeature[1][0], /^Outlet 2 is past the end of wall A/);
+});
+
+test("featureFromValues keeps only the keys each kind uses", () => {
+  const values = { wall: 1, offset: 5, width: 30, height: 80, sill: 30, depth: 6 };
+  assert.deepEqual(featureFromValues({ ...values, kind: "outlet" }), { kind: "outlet", wall: 1, offset: 5 });
+  assert.deepEqual(featureFromValues({ ...values, kind: "door" }),
+    { kind: "door", wall: 1, offset: 5, width: 30, height: 80 });
+  assert.deepEqual(featureFromValues({ ...values, kind: "window" }),
+    { kind: "window", wall: 1, offset: 5, width: 30, height: 80, sill: 30 });
+  assert.deepEqual(featureFromValues({ ...values, kind: "radiator" }),
+    { kind: "radiator", wall: 1, offset: 5, width: 30, height: 80, depth: 6 });
+});
+
+test("a radiator's empty height and depth are left out, not NaN", () => {
+  const radiator = featureFromValues({ kind: "radiator", wall: 0, offset: 0, width: 30, height: NaN, sill: NaN, depth: NaN });
+  assert.deepEqual(radiator, { kind: "radiator", wall: 0, offset: 0, width: 30 });
+});
+
+test("buildGeometry includes features and their errors", () => {
+  const window = { kind: "window", wall: 0, offset: 0, width: 120, height: 54, sill: 30 };
+  const { geometry, errors, featureErrors } = buildGeometry({
+    shape: "rectangle", width: 114, length: 150, ceiling: 102, features: [window],
+  });
+  assert.deepEqual(geometry.features, [window]);
+  assert.deepEqual(errors, ["Window 1 is wider than wall A (120 in on a 114 in wall)."]);
+  assert.deepEqual(featureErrors, [["Window 1 is wider than wall A (120 in on a 114 in wall)."]]);
+});
+
+test("features aren't checked until the outline is valid", () => {
+  const { featureErrors } = buildGeometry({
+    shape: "rectangle", width: NaN, length: 150, ceiling: 102,
+    features: [{ kind: "outlet", wall: 9, offset: 0 }],
+  });
+  assert.deepEqual(featureErrors, [[]]);
+});
+
+test("with a bad ceiling, feature heights are checked against 240 in", () => {
+  const tallDoor = { kind: "door", wall: 0, offset: 0, width: 34, height: 200 };
+  const { errors } = buildGeometry({ shape: "rectangle", width: 114, length: 150, ceiling: NaN, features: [tallDoor] });
+  assert.equal(errors.length, 1);   // only the ceiling message; 200 <= 240
+});
+
+
+test("featureRect: a door's zone on the south wall, measured from its left corner", () => {
+  // The south wall runs east to west from (114, 150); inside is north.
+  const door = { kind: "door", wall: 2, offset: 10, width: 34, height: 80 };
+  assert.deepEqual(featureRect(RECT_114, door, 34), [[104, 150], [70, 150], [70, 116], [104, 116]]);
+});
+
+test("featureRect on the west wall reaches east into the room", () => {
+  const closet = { kind: "closet", wall: 3, offset: 30, width: 60, height: 84 };
+  assert.deepEqual(featureRect(RECT_114, closet, 24), [[0, 120], [0, 60], [24, 60], [24, 120]]);
 });

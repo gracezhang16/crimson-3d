@@ -139,3 +139,15 @@ Technical choices:
 - **Wall rows are cloned from an HTML `<template>`**, so their markup (labels included) lives in the template, not in JavaScript strings.
 - **The inactive shape's fieldset is `disabled` as well as hidden**, so its fields are neither validated nor submitted.
 - **Dorm fields: name 1–60 characters (unique), yard up to 60, description up to 500**; the spec gives no limits.
+
+## 2026-11-24 (A3, built for Hannah with the team's agreement)
+
+- **Feature validation now exists in JavaScript too** (`builder/state.js: featureProblems`), mirroring `geometry.py`'s `_validate_features` message for message, because A3 needs inline errors as you type. This contradicts the `geometry.js` header note that "validation lives only in Python". The server remains the gatekeeper and checks again on save (A4). The JS copy lives in the builder, not in the shared contract file.
+- **One fixture file keeps the two copies identical**: `tests/fixtures/feature_cases.json` lists 19 cases with their exact expected messages. `tests/test_geometry.py` checks `validate_room` against it and `tests/builder.test.mjs` checks `featureProblems`. A wording change on one side fails the other side's tests.
+- **Features are only checked once the outline is valid, and against 240 in while the ceiling is invalid**, the same as `validate_room`.
+- **`featureFromValues` keeps only the keys each kind uses** (an outlet has no width; only windows have a sill). A radiator's empty height and depth are left out rather than sent as blanks, because both are optional in SPEC.md 4.2.
+- **Each feature row is its own `<tbody>`** holding the inputs row and a hidden error row, so a row's problems sit directly under it and the two stay together when removed. Rows with problems are tinted red (Bootstrap `table-danger`) and the reason is shown as text, so colour isn't the only signal.
+- **A wall deleted from the shape stays selected as "F (removed)"** in its features' dropdowns, so the row shows an error rather than quietly moving the door to a different wall.
+- **The preview draws features in the planner's colours**: door = brown stretch of wall plus its faint door zone, window = blue double line, closet = dashed 24 in box, radiator = grey box, outlet = dot. Features with problems aren't drawn. Positions come from `featureSpan()`, shared with the planner.
+- **Red arrows mark each wall's left corner** (SPEC.md 9.1 item 4). Outlines are clockwise, so that's simply each wall's start corner. The arrowhead is an SVG `<marker>` sized in inches (`markerUnits="userSpaceOnUse"`).
+- **The form column is now 7 of 12 Bootstrap columns (preview 5)** so the eight-column features table fits without hiding the dropdown text.

@@ -72,7 +72,63 @@
     font-weight: 700;
 }
 
+/* Features, in the same colours as the 3D planner (planner/features.js). */
+.preview-door-zone {
+    fill: rgb(165 28 48 / 12%);
+}
+
+.preview-door-leaf {
+    stroke: #8b5a2b;
+    stroke-width: 6;
+}
+
+.preview-window-line {
+    stroke: #4f8fcf;
+    stroke-width: 2;
+}
+
+.preview-closet-box {
+    fill: rgb(201 185 156 / 35%);
+    stroke: #a08f70;
+    stroke-width: 1.5;
+    stroke-dasharray: 5 3;
+}
+
+.preview-radiator-box {
+    fill: #9aa1ad;
+    stroke: #6d737e;
+    stroke-width: 1;
+}
+
+.preview-outlet-dot {
+    fill: #1b2230;
+}
+
+/* Arrows at each wall's left corner: where distances are measured from. */
+.preview-corner-arrow {
+    stroke: var(--crimson);
+    stroke-width: 1.5;
+}
+
+.preview-arrowhead {
+    fill: var(--crimson);
+}
+
 /* Keep the sticky preview below the page top on wide screens. */
 .builder-preview.sticky-lg-top {
     top: 1rem;
+}
+
+/* Builder features table: number boxes just wide enough for 3 digits, and
+   dropdowns wide enough to read ("Radiator", "F (removed)"). */
+.features-table .feature-number {
+    width: 4.25rem;
+}
+
+.features-table .feature-kind {
+    min-width: 7rem;
+}
+
+.features-table .feature-wall {
+    min-width: 4.5rem;
 }

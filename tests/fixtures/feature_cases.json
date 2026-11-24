@@ -1,0 +1,24 @@
+{
+  "_comment": "Feature validation cases shared by tests/test_geometry.py (geometry.validate_room, Python) and tests/builder.test.mjs (builder/state.js featureProblems, JavaScript). Both must give exactly these messages, so the builder's inline errors match what the server says on save. Rooms are 114 x 150 in with a 102 in ceiling unless a case gives an outline.",
+  "cases": [
+    {"name": "closet exactly filling a wall", "features": [{"kind": "closet", "wall": 0, "offset": 0, "width": 114, "height": 84}], "expected": []},
+    {"name": "radiator without height or depth", "features": [{"kind": "radiator", "wall": 0, "offset": 0, "width": 30}], "expected": []},
+    {"name": "outlet at the very end of a wall", "features": [{"kind": "outlet", "wall": 0, "offset": 114}], "expected": []},
+    {"name": "wall below range", "features": [{"kind": "outlet", "wall": -1, "offset": 0}], "expected": ["Outlet 1 must be on a wall from A to D."]},
+    {"name": "wall above range", "features": [{"kind": "outlet", "wall": 4, "offset": 0}], "expected": ["Outlet 1 must be on a wall from A to D."]},
+    {"name": "negative offset", "features": [{"kind": "outlet", "wall": 0, "offset": -1}], "expected": ["Outlet 1 needs a distance from the corner of 0 in or more."]},
+    {"name": "outlet past the end", "features": [{"kind": "outlet", "wall": 0, "offset": 115}], "expected": ["Outlet 1 is past the end of wall A (115 in on a 114 in wall)."]},
+    {"name": "missing width", "features": [{"kind": "closet", "wall": 0, "offset": 0, "height": 84}], "expected": ["Closet 1 needs a width of 1 in or more."]},
+    {"name": "window wider than its wall", "features": [{"kind": "window", "wall": 0, "offset": 0, "width": 120, "height": 54, "sill": 30}], "expected": ["Window 1 is wider than wall A (120 in on a 114 in wall)."]},
+    {"name": "door running past the end", "features": [{"kind": "door", "wall": 0, "offset": 90, "width": 34, "height": 80}], "expected": ["Door 1 runs past the end of wall A (90 + 34 in on a 114 in wall)."]},
+    {"name": "missing height", "features": [{"kind": "door", "wall": 0, "offset": 0, "width": 30}], "expected": ["Door 1 needs a height of 1 in or more."]},
+    {"name": "door taller than the ceiling", "features": [{"kind": "door", "wall": 0, "offset": 0, "width": 34, "height": 103}], "expected": ["Door 1 is taller than the ceiling (103 in under a 102 in ceiling)."]},
+    {"name": "window without sill", "features": [{"kind": "window", "wall": 0, "offset": 0, "width": 30, "height": 54}], "expected": ["Window 1 needs a sill height of 0 in or more."]},
+    {"name": "window above the ceiling", "features": [{"kind": "window", "wall": 0, "offset": 0, "width": 30, "height": 60, "sill": 43}], "expected": ["Window 1 reaches above the ceiling (sill 43 in + height 60 in under a 102 in ceiling)."]},
+    {"name": "radiator depth zero", "features": [{"kind": "radiator", "wall": 0, "offset": 0, "width": 30, "depth": 0}], "expected": ["Radiator 1 needs a depth of 1 in or more."]},
+    {"name": "numbering per kind", "features": [{"kind": "window", "wall": 0, "offset": 0, "width": 30, "height": 54, "sill": 30}, {"kind": "door", "wall": 1, "offset": 0, "width": 34, "height": 80}, {"kind": "window", "wall": 1, "offset": 40, "width": 200, "height": 54, "sill": 30}], "expected": ["Window 2 is wider than wall B (200 in on a 150 in wall)."]},
+    {"name": "width and height both wrong", "features": [{"kind": "door", "wall": 0, "offset": 0, "width": 0, "height": 0}], "expected": ["Door 1 needs a width of 1 in or more.", "Door 1 needs a height of 1 in or more."]},
+    {"name": "diagonal wall lengths show one decimal", "outline": [[0, 0], [100, 0], [0, 100]], "features": [{"kind": "door", "wall": 1, "offset": 0, "width": 150, "height": 80}], "expected": ["Door 1 is wider than wall B (150 in on a 141.4 in wall)."]},
+    {"name": "at most 40 features", "features": "41 outlets", "expected": ["A room can have at most 40 features."]}
+  ]
+}

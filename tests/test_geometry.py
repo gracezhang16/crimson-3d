@@ -400,3 +400,24 @@ def test_custom_item_size_at_the_limits_passes():
 def test_every_problem_is_reported():
     errors = placement_errors({"furniture_id": 99, "x": 999, "y": 0, "rotation": 45})
     assert len(errors) == 3
+
+
+# ---------------------------------------------------------------------------
+# Shared feature cases: the same file is checked against builder/state.js in
+# tests/builder.test.mjs, so the builder's inline errors match the server's.
+# ---------------------------------------------------------------------------
+
+FEATURE_CASES = json.loads(
+    (Path(__file__).parent / "fixtures" / "feature_cases.json").read_text()
+)["cases"]
+
+
+@pytest.mark.parametrize("case", FEATURE_CASES, ids=lambda case: case["name"])
+def test_shared_feature_cases(case):
+    features = case["features"]
+    if features == "41 outlets":
+        features = [{"kind": "outlet", "wall": 0, "offset": 1}] * 41
+    room = make_room(features=features)
+    if "outline" in case:
+        room["outline"] = case["outline"]
+    assert validate_room(room) == case["expected"]
