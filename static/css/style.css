@@ -32,3 +32,47 @@
 .narrow-card {
     max-width: 36rem;
 }
+
+/* --- Admin room builder preview (builder/preview.js draws the SVG) --- */
+.builder-preview svg {
+    aspect-ratio: 4 / 3;
+    background: var(--bs-body-bg);
+}
+
+.preview-floor {
+    fill: #f6f1e7;
+}
+
+.preview-grid line {
+    stroke: #ddd3c1;
+    stroke-width: 1;
+}
+
+.preview-walls {
+    fill: none;
+    stroke: #1b2230;
+    stroke-width: 2.5;
+    stroke-linejoin: miter;
+}
+
+/* The gap between where an unclosed walk ends and where it started. */
+.preview-gap {
+    stroke: #dc3545;
+    stroke-width: 2;
+    stroke-dasharray: 6 4;
+}
+
+.preview-label {
+    fill: #2f5d8a;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+
+.preview-letter {
+    fill: var(--crimson);
+    font-weight: 700;
+}
+
+/* Keep the sticky preview below the page top on wide screens. */
+.builder-preview.sticky-lg-top {
+    top: 1rem;
+}

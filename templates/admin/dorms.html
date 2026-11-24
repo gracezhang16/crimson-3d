@@ -1,0 +1,65 @@
+{% extends "layout.html" %}
+
+{% block title %}Dorms · Admin{% endblock %}
+
+{% block main %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}">Admin</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Dorms</li>
+        </ol>
+    </nav>
+
+    <h1 class="h3 mb-3">Dorms</h1>
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            {% if dorms %}
+                <div class="table-responsive">
+                    <table class="table align-middle">
+                        <thead>
+                            <tr>
+                                <th scope="col">Dorm</th>
+                                <th scope="col">Yard</th>
+                                <th scope="col" class="text-end">Room types</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for dorm in dorms %}
+                                <tr>
+                                    <td><a href="{{ url_for('pages.dorm', dorm_id=dorm.id) }}">{{ dorm.name }}</a></td>
+                                    <td>{{ dorm.yard or "" }}</td>
+                                    <td class="text-end">{{ dorm.type_count }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p>No dorms yet. Add the first one.</p>
+            {% endif %}
+        </div>
+
+        <div class="col-lg-5">
+            <h2 class="h5">Add a dorm</h2>
+            {% if error %}
+                <div class="alert alert-danger" role="alert">{{ error }}</div>
+            {% endif %}
+            <form action="{{ url_for('admin.dorms') }}" method="post">
+                <div class="mb-3">
+                    <label for="name" class="form-label">Name</label>
+                    <input id="name" name="name" class="form-control" value="{{ form.name }}" maxlength="60" required>
+                </div>
+                <div class="mb-3">
+                    <label for="yard" class="form-label">Yard <span class="text-body-secondary small">(optional)</span></label>
+                    <input id="yard" name="yard" class="form-control" value="{{ form.yard }}" maxlength="60">
+                </div>
+                <div class="mb-3">
+                    <label for="description" class="form-label">Description <span class="text-body-secondary small">(optional)</span></label>
+                    <textarea id="description" name="description" class="form-control" rows="3" maxlength="500">{{ form.description }}</textarea>
+                </div>
+                <button type="submit" class="btn btn-crimson">Add dorm</button>
+            </form>
+        </div>
+    </div>
+{% endblock %}

@@ -117,3 +117,25 @@ Technical choices:
 - **The room types list links to each type's facts page**, not straight to `/plan/<id>`, because the planner route is on the `planner` branch; keeping the `admin` branch independent avoids a merge-order dependency. The facts page has "Open in 3D". Edit and Publish buttons arrive in A4.
 - **"Last updated" on the room types list is labelled UTC** (it's SQLite's `CURRENT_TIMESTAMP`).
 - **Navbar "Admin" link for admins only** (`layout.html`, shared).
+
+## 2026-11-24 (A2, built for Hannah with the team's agreement)
+
+Product choices confirmed by Grace:
+
+- **Any-shape rooms are in the builder from A2, not A8.** Some rooms aren't rectangular, and building both modes now avoids rewriting the form later. This moves part of a Better-tier milestone (A8) into the Good tier, against the CLAUDE.md "Good first" rule, by the team's choice. The planner and the room format already handled any polygon.
+- **Custom shapes are entered by "walking the walls"**: start at a corner, go clockwise (room on your right), and give each wall's direction (N/E/S/W) and tape-measured length. It matches how rooms are measured. Walls are at right angles only; angled walls (e.g. bay windows) would need the coordinate or click-to-draw approach of A8. Alternatives considered: a table of corner coordinates; click-to-draw on a grid (A8).
+- **The dorms page (`/admin/dorms`, list and add) was pulled forward from A7** so real dorms can be added before rooms are built; otherwise only Demo Hall existed.
+
+Technical choices:
+
+- **Counter-clockwise walks are rejected with a message, not silently reversed** (SPEC.md 9.2 suggests reversing). Reversing would re-letter the walls so they no longer matched the table rows the admin typed, and A3's features refer to walls by letter.
+- **Walls that don't meet are drawn open, with the gap as a dashed red line**, and the message says how far off the end is ("6 in east and 2 in south"). Drawing them closed would invent a last wall with the wrong length.
+- **Walks are shifted so the smallest x and y are 0.** SPEC.md 4.2 allows coordinates 0–600 only, and a walk may head west or north of its first corner. So the first corner isn't always the origin, which differs from the SPEC.md 4.1 sentence "The origin is the room's first corner"; the team may want to update that sentence. Validation is unaffected.
+- **Doubling back (a wall followed by one in the opposite direction) is rejected**, matching `validate_room`'s fold-back rule. Two walls in the same direction in a row are allowed (a straight-through corner).
+- **Self-crossing outlines are caught by the server** (`validate_room`, on save in A4), not yet in the live preview.
+- **The preview uses the SVG `viewBox` to scale**: corners are drawn in inches as-is, because SVG and our plan both have y pointing down. Lines use `vector-effect: non-scaling-stroke`; the 1 ft grid is clipped to the room with a `clipPath`. Side-wall labels are anchored away from the wall (`labelAnchor`).
+- **Pure builder code is split into `builder/state.js`** (form values → geometry) **and the helpers in `preview.js`**, both covered by `tests/builder.test.mjs`. `main.js` only reads the form and wires things up.
+- **Form fields are read with `form.elements.namedItem(name)`**, because `form.elements.length` is the number of fields, not our "length" input. That bug was caught in a screenshot.
+- **Wall rows are cloned from an HTML `<template>`**, so their markup (labels included) lives in the template, not in JavaScript strings.
+- **The inactive shape's fieldset is `disabled` as well as hidden**, so its fields are neither validated nor submitted.
+- **Dorm fields: name 1–60 characters (unique), yard up to 60, description up to 500**; the spec gives no limits.

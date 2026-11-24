@@ -1,0 +1,172 @@
+{% extends "layout.html" %}
+
+{# The room builder (Hannah), SPEC.md 9.1. builder/main.js turns the form into
+   the room format, draws the live preview and fills the hidden "geometry"
+   field. A2: shape and details. A3 adds the features table, A4 saving. #}
+
+{% block title %}New room type · Admin{% endblock %}
+
+{% block main %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}">Admin</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.room_types') }}">Room types</a></li>
+            <li class="breadcrumb-item active" aria-current="page">New</li>
+        </ol>
+    </nav>
+
+    <h1 class="h3 mb-3">New room type</h1>
+
+    <form id="room-type-form" method="post" novalidate>
+        <input type="hidden" name="geometry" value="">
+
+        <div class="row g-4">
+            <div class="col-lg-6">
+                <h2 class="h5">Room</h2>
+                <div class="row g-3 mb-4">
+                    <div class="col-sm-6">
+                        <label for="dorm_id" class="form-label">Dorm</label>
+                        <select id="dorm_id" name="dorm_id" class="form-select" required>
+                            {% for dorm in dorms %}
+                                <option value="{{ dorm.id }}">{{ dorm.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text"><a href="{{ url_for('admin.dorms') }}">Add a dorm</a></div>
+                    </div>
+                    <div class="col-sm-6">
+                        <label for="name" class="form-label">Name</label>
+                        <input id="name" name="name" class="form-control" maxlength="60" required
+                               placeholder="e.g. Single, 4th floor">
+                    </div>
+                    <div class="col-sm-6">
+                        <label for="capacity" class="form-label">Capacity (students)</label>
+                        <input id="capacity" name="capacity" type="number" class="form-control" min="1" max="6" value="1" required>
+                    </div>
+                    <div class="col-sm-6">
+                        <label for="bathroom" class="form-label">Bathroom</label>
+                        <select id="bathroom" name="bathroom" class="form-select">
+                            <option value="">Not recorded</option>
+                            <option value="en-suite">En-suite (in the room)</option>
+                            <option value="hallway">Shared hallway bathroom</option>
+                            <option value="shared-suite">Shared with the suite</option>
+                        </select>
+                    </div>
+                </div>
+
+                <h2 class="h5">Shape</h2>
+                <div class="mb-3" role="radiogroup" aria-label="Shape">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="shape" id="shape-rectangle" value="rectangle" checked>
+                        <label class="form-check-label" for="shape-rectangle">Rectangle</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="shape" id="shape-walls" value="walls">
+                        <label class="form-check-label" for="shape-walls">Custom shape</label>
+                    </div>
+                </div>
+
+                {# Only one of these two fieldsets is active. main.js disables the
+                   other, so its fields are neither checked nor submitted. #}
+                <fieldset id="rectangle-fields" class="row g-3 mb-3">
+                    <div class="col-sm-6">
+                        <label for="width" class="form-label">Width, east to west (in)</label>
+                        <input id="width" name="width" type="number" class="form-control" min="1" max="600" step="1"
+                               inputmode="numeric" value="114">
+                    </div>
+                    <div class="col-sm-6">
+                        <label for="length" class="form-label">Length, north to south (in)</label>
+                        <input id="length" name="length" type="number" class="form-control" min="1" max="600" step="1"
+                               inputmode="numeric" value="150">
+                    </div>
+                </fieldset>
+
+                <fieldset id="wall-fields" class="mb-3" hidden disabled>
+                    <p class="small text-body-secondary mb-2">
+                        Start at any corner and walk round the room <strong>clockwise</strong>,
+                        keeping the room on your right. For each wall, give its direction and
+                        tape-measured length. Wall A is the first wall you walk along.
+                    </p>
+                    <table class="table table-sm align-middle mb-2">
+                        <thead>
+                            <tr>
+                                <th scope="col">Wall</th>
+                                <th scope="col">Direction</th>
+                                <th scope="col">Length</th>
+                                <th scope="col"><span class="visually-hidden">Remove</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="wall-rows"></tbody>
+                    </table>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-action="add-wall">Add wall</button>
+                </fieldset>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-sm-6">
+                        <label for="ceiling" class="form-label">Ceiling height (in)</label>
+                        <input id="ceiling" name="ceiling" type="number" class="form-control" min="72" max="240" step="1"
+                               inputmode="numeric" value="102">
+                    </div>
+                </div>
+
+                <h2 class="h5">Measurement</h2>
+                <div class="row g-3 mb-3">
+                    <div class="col-sm-6">
+                        <label for="measured_by" class="form-label">Measured by</label>
+                        <input id="measured_by" name="measured_by" class="form-control" maxlength="60">
+                    </div>
+                    <div class="col-sm-6">
+                        <label for="measured_on" class="form-label">Measured on</label>
+                        <input id="measured_on" name="measured_on" type="date" class="form-control">
+                    </div>
+                    <div class="col-12">
+                        <label for="notes" class="form-label">Notes</label>
+                        <textarea id="notes" name="notes" class="form-control" rows="2" maxlength="500"></textarea>
+                    </div>
+                </div>
+                <p class="small text-body-secondary">Saving is added in milestone A4.</p>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="builder-preview sticky-lg-top">
+                    <h2 class="h5">Preview</h2>
+                    <svg id="preview" class="border rounded w-100" role="img"
+                         aria-label="Floor plan of the room, drawn to scale"></svg>
+                    {# Live summary or problems, announced to screen readers as they change. #}
+                    <div id="preview-status" class="mt-2 small" aria-live="polite"></div>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    {# A <template> is HTML the browser keeps but doesn't show. main.js clones
+       it for each wall row, so the row's markup lives here, not in JavaScript. #}
+    <template id="wall-row-template">
+        <tr class="wall-row">
+            <th scope="row" class="wall-letter">A</th>
+            <td>
+                <select class="form-select form-select-sm wall-direction" aria-label="Direction">
+                    <option value="east">East ▸</option>
+                    <option value="south">South ▾</option>
+                    <option value="west">West ◂</option>
+                    <option value="north">North ▴</option>
+                </select>
+            </td>
+            <td>
+                <div class="input-group input-group-sm has-validation">
+                    <input type="number" class="form-control wall-length" min="1" max="600" step="1"
+                           inputmode="numeric" aria-label="Length in inches">
+                    <span class="input-group-text">in</span>
+                    <div class="invalid-feedback"></div>
+                </div>
+            </td>
+            <td class="text-end">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-action="remove-wall"
+                        aria-label="Remove wall">×</button>
+            </td>
+        </tr>
+    </template>
+{% endblock %}
+
+{% block scripts %}
+    <script type="module" src="{{ url_for('static', filename='js/builder/main.js') }}"></script>
+{% endblock %}

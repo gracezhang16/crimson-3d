@@ -1,0 +1,172 @@
+/**
+ * Room builder page (templates/admin/room_type_form.html). Hannah.
+ *
+ * Form state -> room-format object -> live SVG preview, on every keystroke.
+ * The pure parts live in state.js (form values -> geometry) and preview.js
+ * (geometry -> SVG); this file only reads the form and wires them together.
+ *
+ * One "input" listener on the whole form catches typing in any field, because
+ * input events bubble up from the field to the form ("event delegation").
+ */
+
+import { formatFeetInches } from "../shared/units.js";
+import { wallLetter } from "../shared/geometry.js";
+import { drawPreview } from "./preview.js";
+import { buildGeometry, parseInches, rectangleWalls, wallProblem } from "./state.js";
+
+const form = document.querySelector("#room-type-form");
+const svg = document.querySelector("#preview");
+const status = document.querySelector("#preview-status");
+const rectangleFields = document.querySelector("#rectangle-fields");
+const wallFields = document.querySelector("#wall-fields");
+const wallRows = document.querySelector("#wall-rows");
+const rowTemplate = document.querySelector("#wall-row-template");
+
+/**
+ * @returns {{direction: string, length: number}[]} the wall table, row by row
+ */
+function readWalls() {
+  return [...wallRows.querySelectorAll(".wall-row")].map((row) => ({
+    direction: row.querySelector(".wall-direction").value,
+    length: parseInches(row.querySelector(".wall-length").value),
+  }));
+}
+
+/**
+ * Look up a form field by its name attribute.
+ *
+ * Why not form.elements.length? Because `elements` has built-in properties of
+ * its own: `elements.length` is the number of fields, not our "length" input.
+ * namedItem() always means "the field with this name".
+ *
+ * @param {string} name
+ * @returns {HTMLInputElement | RadioNodeList}
+ */
+function field(name) {
+  return form.elements.namedItem(name);
+}
+
+/**
+ * @returns {object} the values buildGeometry() needs, read from the form
+ */
+function readForm() {
+  return {
+    shape: field("shape").value,
+    width: parseInches(field("width").value),
+    length: parseInches(field("length").value),
+    walls: readWalls(),
+    ceiling: parseInches(field("ceiling").value),
+  };
+}
+
+/**
+ * Add a row to the wall table, cloned from the <template>.
+ *
+ * @param {string} direction
+ * @param {number | string} length
+ */
+function addWallRow(direction = "east", length = "") {
+  const row = rowTemplate.content.firstElementChild.cloneNode(true);
+  row.querySelector(".wall-direction").value = direction;
+  row.querySelector(".wall-length").value = length;
+  wallRows.append(row);
+}
+
+/**
+ * Letter the rows A, B, C... and mark rows with a bad length in red, with
+ * the reason underneath (Bootstrap's is-invalid + invalid-feedback).
+ *
+ * @param {{direction: string, length: number}[]} walls
+ */
+function refreshRows(walls) {
+  wallRows.querySelectorAll(".wall-row").forEach((row, i) => {
+    row.querySelector(".wall-letter").textContent = wallLetter(i);
+    row.querySelector(".wall-direction").setAttribute("aria-label", `Wall ${wallLetter(i)} direction`);
+    const input = row.querySelector(".wall-length");
+    input.setAttribute("aria-label", `Wall ${wallLetter(i)} length in inches`);
+    // An empty box isn't an error yet; the admin may still be typing.
+    const problem = input.value === "" ? null : wallProblem(walls[i]);
+    input.classList.toggle("is-invalid", Boolean(problem));
+    row.querySelector(".invalid-feedback").textContent = problem ?? "";
+  });
+}
+
+/**
+ * Show either the summary ("9′ 6″ × 12′ 6″ overall · 4 walls") or the list
+ * of problems under the preview.
+ *
+ * @param {object | null} geometry
+ * @param {string[]} errors
+ */
+function showStatus(geometry, errors) {
+  status.replaceChildren();
+  if (errors.length) {
+    const list = document.createElement("ul");
+    list.className = "text-danger mb-0 ps-3";
+    for (const error of errors) {
+      const item = document.createElement("li");
+      item.textContent = error;
+      list.append(item);
+    }
+    status.append(list);
+    return;
+  }
+  const xs = geometry.outline.map(([x]) => x);
+  const ys = geometry.outline.map(([, y]) => y);
+  status.className = "mt-2 small text-success";
+  status.textContent = `✓ ${formatFeetInches(Math.max(...xs))} × ${formatFeetInches(Math.max(...ys))} overall · ${geometry.outline.length} walls`;
+}
+
+/** Rebuild the geometry from the form and redraw everything. */
+function update() {
+  const values = readForm();
+  const { geometry, errors, openEnd } = buildGeometry(values);
+  if (values.shape === "walls") {
+    refreshRows(values.walls);
+  }
+  status.className = "mt-2 small";
+  showStatus(geometry, errors);
+  drawPreview(svg, geometry, openEnd);
+  // Only a complete, valid room goes into the hidden field the server reads (A4).
+  field("geometry").value = errors.length ? "" : JSON.stringify(geometry);
+}
+
+/**
+ * Switch between Rectangle and Custom shape. A custom shape starts from the
+ * current rectangle's four walls, so the admin only edits what differs.
+ *
+ * @param {"rectangle" | "walls"} shape
+ */
+function setShape(shape) {
+  const custom = shape === "walls";
+  rectangleFields.hidden = rectangleFields.disabled = custom;
+  wallFields.hidden = wallFields.disabled = !custom;
+  if (custom && !wallRows.children.length) {
+    const width = parseInches(field("width").value) || 120;
+    const length = parseInches(field("length").value) || 120;
+    rectangleWalls(width, length).forEach((wall) => addWallRow(wall.direction, wall.length));
+  }
+  update();
+}
+
+form.addEventListener("input", update);
+form.addEventListener("change", (event) => {
+  if (event.target.name === "shape") {
+    setShape(event.target.value);
+  }
+});
+form.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-action]");
+  if (button?.dataset.action === "add-wall") {
+    addWallRow();
+    wallRows.lastElementChild.querySelector(".wall-length").focus();
+    update();
+  } else if (button?.dataset.action === "remove-wall") {
+    button.closest("tr").remove();
+    update();
+  }
+});
+// Don't let Enter submit the form until saving exists (A4).
+form.addEventListener("submit", (event) => event.preventDefault());
+
+setShape(field("shape").value);
