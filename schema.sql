@@ -18,13 +18,13 @@ CREATE TABLE dorms (
     description TEXT
 );
 
-CREATE TABLE room_types (
+CREATE TABLE suite_types (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     dorm_id      INTEGER NOT NULL REFERENCES dorms(id),
-    name         TEXT NOT NULL,                      -- e.g. "Single, 4th floor"
+    name         TEXT NOT NULL,                      -- e.g. "Two-bedroom suite"
     capacity     INTEGER NOT NULL DEFAULT 1 CHECK (capacity BETWEEN 1 AND 6),
     bathroom     TEXT CHECK (bathroom IN ('en-suite', 'hallway', 'shared-suite')),
-    geometry     TEXT NOT NULL,                      -- the room format (SPEC.md section 4) as JSON text
+    geometry     TEXT NOT NULL,                      -- the suite format (SPEC.md section 4) as JSON text
     status       TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published')),
     measured_by  TEXT,
     measured_on  DATE,
@@ -34,17 +34,18 @@ CREATE TABLE room_types (
     UNIQUE (dorm_id, name)
 );
 
-CREATE TABLE rooms (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    dorm_id       INTEGER NOT NULL REFERENCES dorms(id),
-    number        TEXT NOT NULL,                     -- e.g. "B-21"
-    room_type_id  INTEGER NOT NULL REFERENCES room_types(id),
+-- A specific suite, like Canaday B-21, built like one suite type.
+CREATE TABLE suites (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    dorm_id        INTEGER NOT NULL REFERENCES dorms(id),
+    number         TEXT NOT NULL,                    -- e.g. "B-21"
+    suite_type_id  INTEGER NOT NULL REFERENCES suite_types(id),
     UNIQUE (dorm_id, number)
 );
 
 CREATE TABLE assignments (
-    user_id  INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    room_id  INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE
+    user_id   INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    suite_id  INTEGER NOT NULL REFERENCES suites(id) ON DELETE CASCADE
 );
 
 CREATE TABLE furniture (
@@ -62,8 +63,8 @@ CREATE TABLE furniture (
 
 CREATE TABLE layouts (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id       INTEGER REFERENCES users(id) ON DELETE CASCADE,   -- NULL for a room type's default layout
-    room_type_id  INTEGER NOT NULL REFERENCES room_types(id) ON DELETE CASCADE,
+    user_id        INTEGER REFERENCES users(id) ON DELETE CASCADE,   -- NULL for a suite type's default layout
+    suite_type_id  INTEGER NOT NULL REFERENCES suite_types(id) ON DELETE CASCADE,
     name          TEXT NOT NULL,
     is_default    INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
     share_token   TEXT UNIQUE,
@@ -83,5 +84,5 @@ CREATE TABLE placements (
     rotation      INTEGER NOT NULL DEFAULT 0 CHECK (rotation IN (0, 90, 180, 270))
 );
 
-CREATE INDEX layouts_by_user ON layouts (user_id, room_type_id);
+CREATE INDEX layouts_by_user ON layouts (user_id, suite_type_id);
 CREATE INDEX placements_by_layout ON placements (layout_id);

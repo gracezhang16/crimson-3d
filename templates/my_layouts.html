@@ -12,7 +12,7 @@
     {# Both the empty message and the table are always rendered; layouts.js
        swaps them when the last layout is deleted. #}
     <p id="layouts-empty" {% if layouts %}hidden{% endif %}>
-        You haven't saved any layouts yet. <a href="{{ url_for('pages.index') }}">Pick a room</a>,
+        You haven't saved any layouts yet. <a href="{{ url_for('pages.index') }}">Pick a suite</a>,
         arrange the furniture, and press Save.
     </p>
 
@@ -22,7 +22,7 @@
                 <thead>
                     <tr>
                         <th scope="col">Name</th>
-                        <th scope="col">Room</th>
+                        <th scope="col">Suite</th>
                         <th scope="col" class="text-end">Items</th>
                         <th scope="col">Last saved</th>
                         <th scope="col"><span class="visually-hidden">Actions</span></th>
@@ -56,7 +56,7 @@
                             </td>
                             <td class="text-end text-nowrap">
                                 <a class="btn btn-sm btn-crimson"
-                                   href="{{ url_for('pages.plan', type_id=layout.room_type_id, layout=layout.id) }}">Open</a>
+                                   href="{{ url_for('pages.plan', type_id=layout.suite_type_id, layout=layout.id) }}">Open</a>
                                 <button type="button" class="btn btn-sm btn-outline-secondary" data-action="rename">Rename</button>
                                 <button type="button" class="btn btn-sm btn-outline-danger" data-action="delete">Delete</button>
                             </td>

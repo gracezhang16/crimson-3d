@@ -9,12 +9,12 @@
        each screen width (2 on phones, 4 on wide screens). #}
     <div class="row row-cols-2 row-cols-md-4 g-3 mb-4">
         {% for label, value in [
-            ("Published room types", counts.published),
-            ("Draft room types", counts.drafts),
+            ("Published suite types", counts.published),
+            ("Draft suite types", counts.drafts),
             ("Dorms", counts.dorms),
-            ("Rooms", counts.rooms),
+            ("Suites", counts.suites),
             ("Students", counts.students),
-            ("Students with a room", counts.assigned),
+            ("Students with a suite", counts.assigned),
             ("Furniture items", counts.furniture),
         ] %}
             <div class="col">
@@ -30,17 +30,17 @@
 
     <h2 class="h5">Manage</h2>
     <div class="list-group narrow-card">
-        <a class="list-group-item list-group-item-action" href="{{ url_for('admin.room_types') }}">
-            Room types <span class="text-body-secondary small">· build, edit and publish rooms</span>
+        <a class="list-group-item list-group-item-action" href="{{ url_for('admin.suite_types') }}">
+            Suite types <span class="text-body-secondary small">· build, edit and publish suites</span>
         </a>
-        <a class="list-group-item list-group-item-action" href="{{ url_for('admin.new_room_type') }}">
-            New room type <span class="text-body-secondary small">· draw a room from its measurements</span>
+        <a class="list-group-item list-group-item-action" href="{{ url_for('admin.new_suite_type') }}">
+            New suite type <span class="text-body-secondary small">· draw a suite from its measurements</span>
         </a>
-        <a class="list-group-item list-group-item-action" href="{{ url_for('admin.rooms') }}">
-            Rooms and student assignments <span class="text-body-secondary small">· link students to their rooms</span>
+        <a class="list-group-item list-group-item-action" href="{{ url_for('admin.suites') }}">
+            Suites and student assignments <span class="text-body-secondary small">· link students to their suites</span>
         </a>
         <a class="list-group-item list-group-item-action" href="{{ url_for('admin.dorms') }}">
-            Dorms <span class="text-body-secondary small">· add the dorms rooms belong to</span>
+            Dorms <span class="text-body-secondary small">· add the dorms suites belong to</span>
         </a>
         {# Pages still to be built, listed so the plan is visible. Each becomes a
            link when its milestone lands (SPEC.md 10, admin track). #}

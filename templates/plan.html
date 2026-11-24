@@ -4,7 +4,7 @@
    through the data-* attributes on #planner, never as inline <script> data.
    main.js reads them with element.dataset (data-type-id -> dataset.typeId). #}
 
-{% block title %}{{ room_type.name }} · Planner{% endblock %}
+{% block title %}{{ suite_type.name }} · Planner{% endblock %}
 
 {% block head %}
     <link href="{{ url_for('static', filename='css/planner.css') }}" rel="stylesheet">
@@ -15,16 +15,16 @@
 
 {% block main %}
     <div id="planner" class="planner"
-         data-type-id="{{ room_type.id }}"
+         data-type-id="{{ suite_type.id }}"
          data-layout-id="{{ layout_id }}"
          data-mode="{{ mode }}"
          data-logged-in="{{ 'true' if user else 'false' }}">
 
         <aside class="planner-panel">
             <section>
-                <h1 class="h5 mb-0">{{ room_type.name }}</h1>
-                <a class="small" href="{{ url_for('pages.room_type', type_id=room_type.id) }}">{{ room_type.dorm_name }} · room facts</a>
-                {% if room_type.status == "draft" %}
+                <h1 class="h5 mb-0">{{ suite_type.name }}</h1>
+                <a class="small" href="{{ url_for('pages.suite_type', type_id=suite_type.id) }}">{{ suite_type.dorm_name }} · room facts</a>
+                {% if suite_type.status == "draft" %}
                     <span class="badge text-bg-warning align-self-start">Draft</span>
                 {% endif %}
             </section>

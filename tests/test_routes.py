@@ -1,5 +1,5 @@
 """Route tests (Grace): register, login, logout, home and search, dorm and
-room type pages with draft visibility. Later milestones add ownership and the
+suite type pages with draft visibility. Later milestones add ownership and the
 layout save round trip (SPEC.md 11)."""
 
 import pytest
@@ -34,8 +34,8 @@ def log_in(client, user_id):
 
 
 def type_id(name):
-    """Return the id of the seeded room type with this name."""
-    return db.execute("SELECT id FROM room_types WHERE name = ?", name)[0]["id"]
+    """Return the id of the seeded suite type with this name."""
+    return db.execute("SELECT id FROM suite_types WHERE name = ?", name)[0]["id"]
 
 
 def logged_in_id(client):
@@ -49,7 +49,7 @@ def test_home_page_lists_demo_hall(client):
     assert response.status_code == 200
     page = response.get_data(as_text=True)
     assert "Demo Hall" in page
-    assert "2 room types" in page
+    assert "2 suite types" in page
     assert "not affiliated with Harvard University" in page
 
 
@@ -164,22 +164,22 @@ def test_logout_clears_session(client):
     assert "Log in" in client.get("/").get_data(as_text=True)
 
 
-# --- Browsing: home, search, dorm, room type --------------------------------
+# --- Browsing: home, search, dorm, suite type --------------------------------
 
 @pytest.fixture
 def drafts():
-    """Add a draft room type to Demo Hall, and a dorm whose only type is a draft.
+    """Add a draft suite type to Demo Hall, and a dorm whose only type is a draft.
 
     Both reuse the sample single's geometry. Returns their ids.
     """
-    single = db.execute("SELECT dorm_id, geometry FROM room_types WHERE name = 'Single (sample)'")[0]
+    single = db.execute("SELECT dorm_id, geometry FROM suite_types WHERE name = 'Single (sample)'")[0]
     draft_id = db.execute(
-        "INSERT INTO room_types (dorm_id, name, geometry, status) VALUES (?, 'Secret triple', ?, 'draft')",
+        "INSERT INTO suite_types (dorm_id, name, geometry, status) VALUES (?, 'Secret triple', ?, 'draft')",
         single["dorm_id"], single["geometry"],
     )
     hidden_dorm_id = db.execute("INSERT INTO dorms (name) VALUES ('Hidden House')")
     db.execute(
-        "INSERT INTO room_types (dorm_id, name, geometry, status) VALUES (?, 'Quad', ?, 'draft')",
+        "INSERT INTO suite_types (dorm_id, name, geometry, status) VALUES (?, 'Quad', ?, 'draft')",
         hidden_dorm_id, single["geometry"],
     )
     return {"type": draft_id, "dorm_id": single["dorm_id"], "hidden_dorm": hidden_dorm_id}
@@ -209,7 +209,7 @@ def test_home_links_to_dorm_page(client):
     assert f'href="/dorms/{dorm_id}"' in page
 
 
-def test_search_finds_room_type(client):
+def test_search_finds_suite_type(client):
     page = client.get("/?q=DOUBLE").get_data(as_text=True)
     assert "Double (sample)" in page
     assert "Single (sample)" not in page
@@ -231,7 +231,7 @@ def test_search_percent_sign_is_literal(client):
     assert "Nothing matches" in client.get("/?q=%25").get_data(as_text=True)
 
 
-def test_dorm_page_lists_room_types(client):
+def test_dorm_page_lists_suite_types(client):
     dorm_id = db.execute("SELECT id FROM dorms WHERE name = 'Demo Hall'")[0]["id"]
     response = client.get(f"/dorms/{dorm_id}")
     assert response.status_code == 200
@@ -246,7 +246,7 @@ def test_missing_dorm_is_404(client):
     assert client.get("/dorms/9999").status_code == 404
 
 
-def test_room_type_facts(client):
+def test_suite_type_facts(client):
     response = client.get(f"/types/{type_id('Single (sample)')}")
     assert response.status_code == 200
     page = response.get_data(as_text=True)
@@ -266,7 +266,7 @@ def test_room_without_closet_mentions_wardrobe(client):
     assert "192.0 sq ft" in page          # 144 × 192 / 144
 
 
-def test_missing_room_type_is_404(client):
+def test_missing_suite_type_is_404(client):
     assert client.get("/types/9999").status_code == 404
 
 
@@ -287,7 +287,7 @@ def test_drafts_visible_to_admins(client, drafts):
     as_admin(client)
     response = client.get(f"/types/{drafts['type']}")
     assert response.status_code == 200
-    assert "This room type is a draft" in response.get_data(as_text=True)
+    assert "This suite type is a draft" in response.get_data(as_text=True)
     dorm_page = client.get(f"/dorms/{drafts['dorm_id']}").get_data(as_text=True)
     assert "Secret triple" in dorm_page and "Draft" in dorm_page
     assert "Secret triple" in client.get("/?q=secret").get_data(as_text=True)
@@ -296,21 +296,21 @@ def test_drafts_visible_to_admins(client, drafts):
 
 # --- Student pages: my room, my layouts (S6) --------------------------------
 
-def assign_room(user_id, type_name="Single (sample)", number="B-21"):
+def assign_suite(user_id, type_name="Single (sample)", number="B-21"):
     """Create a room of this type in its dorm and assign it to the user."""
-    room_type = db.execute("SELECT id, dorm_id FROM room_types WHERE name = ?", type_name)[0]
-    room_id = db.execute(
-        "INSERT INTO rooms (dorm_id, number, room_type_id) VALUES (?, ?, ?)",
-        room_type["dorm_id"], number, room_type["id"],
+    suite_type = db.execute("SELECT id, dorm_id FROM suite_types WHERE name = ?", type_name)[0]
+    suite_id = db.execute(
+        "INSERT INTO suites (dorm_id, number, suite_type_id) VALUES (?, ?, ?)",
+        suite_type["dorm_id"], number, suite_type["id"],
     )
-    db.execute("INSERT INTO assignments (user_id, room_id) VALUES (?, ?)", user_id, room_id)
-    return room_type["id"]
+    db.execute("INSERT INTO assignments (user_id, suite_id) VALUES (?, ?)", user_id, suite_id)
+    return suite_type["id"]
 
 
 def add_layout(user_id, type_name, name, placements=1):
     """Insert a layout with this many beds and return its id."""
     layout_id = db.execute(
-        "INSERT INTO layouts (user_id, room_type_id, name) VALUES (?, ?, ?)",
+        "INSERT INTO layouts (user_id, suite_type_id, name) VALUES (?, ?, ?)",
         user_id, type_id(type_name), name,
     )
     for _ in range(placements):
@@ -320,54 +320,54 @@ def add_layout(user_id, type_name, name, placements=1):
     return layout_id
 
 
-def test_my_room_needs_login(client):
-    response = client.get("/my-room")
+def test_my_suite_needs_login(client):
+    response = client.get("/my-suite")
     assert response.status_code == 302
     assert response.headers["Location"] == "/login"
 
 
-def test_my_room_without_assignment(client):
+def test_my_suite_without_assignment(client):
     log_in(client, add_user())
-    response = client.get("/my-room")
+    response = client.get("/my-suite")
     assert response.status_code == 200
-    assert "No room has been assigned" in response.get_data(as_text=True)
+    assert "No suite has been assigned" in response.get_data(as_text=True)
 
 
 def test_assigned_student_lands_on_their_planner(client):
     user_id = add_user()
-    room_type_id = assign_room(user_id)
+    suite_type_id = assign_suite(user_id)
     log_in(client, user_id)
-    response = client.get("/my-room")
+    response = client.get("/my-suite")
     assert response.status_code == 302
-    assert response.headers["Location"] == f"/plan/{room_type_id}"
+    assert response.headers["Location"] == f"/plan/{suite_type_id}"
 
 
-def test_my_room_with_draft_type_explains(client):
+def test_my_suite_with_draft_type_explains(client):
     user_id = add_user()
-    room_type_id = assign_room(user_id)
-    db.execute("UPDATE room_types SET status = 'draft' WHERE id = ?", room_type_id)
+    suite_type_id = assign_suite(user_id)
+    db.execute("UPDATE suite_types SET status = 'draft' WHERE id = ?", suite_type_id)
     log_in(client, user_id)
-    response = client.get("/my-room")
+    response = client.get("/my-suite")
     assert response.status_code == 200
     page = response.get_data(as_text=True)
     assert "Demo Hall B-21" in page
     assert "isn't published yet" in page
 
 
-def test_navbar_shows_my_room_only_when_assigned(client):
+def test_navbar_shows_my_suite_only_when_assigned(client):
     user_id = add_user()
     log_in(client, user_id)
     page = client.get("/").get_data(as_text=True)
     assert "My layouts" in page
-    assert "My room" not in page
+    assert "My suite" not in page
 
-    assign_room(user_id)
-    assert "My room" in client.get("/").get_data(as_text=True)
+    assign_suite(user_id)
+    assert "My suite" in client.get("/").get_data(as_text=True)
 
 
 def test_navbar_hides_student_links_when_logged_out(client):
     page = client.get("/").get_data(as_text=True)
-    assert "My layouts" not in page and "My room" not in page
+    assert "My layouts" not in page and "My suite" not in page
 
 
 def test_my_layouts_needs_login(client):
@@ -404,7 +404,7 @@ def test_my_layouts_lists_own_layouts_across_rooms(client):
 def test_my_layouts_hides_layouts_of_draft_rooms(client):
     me = add_user()
     add_layout(me, "Single (sample)", "Hidden for now")
-    db.execute("UPDATE room_types SET status = 'draft' WHERE name = 'Single (sample)'")
+    db.execute("UPDATE suite_types SET status = 'draft' WHERE name = 'Single (sample)'")
     log_in(client, me)
     assert "Hidden for now" not in client.get("/layouts").get_data(as_text=True)
 
@@ -435,13 +435,13 @@ def test_plan_page_knows_when_logged_in(client):
 def test_plan_page_404s(client):
     assert client.get("/plan/9999").status_code == 404
     single = type_id("Single (sample)")
-    db.execute("UPDATE room_types SET status = 'draft' WHERE id = ?", single)
+    db.execute("UPDATE suite_types SET status = 'draft' WHERE id = ?", single)
     assert client.get(f"/plan/{single}").status_code == 404
 
 
 def test_plan_page_shows_drafts_to_admins(client):
     single = type_id("Single (sample)")
-    db.execute("UPDATE room_types SET status = 'draft' WHERE id = ?", single)
+    db.execute("UPDATE suite_types SET status = 'draft' WHERE id = ?", single)
     admin_id = db.execute("INSERT INTO users (email, hash, role) VALUES ('a@example.com', 'x', 'admin')")
     log_in(client, admin_id)
     assert client.get(f"/plan/{single}").status_code == 200
@@ -487,7 +487,7 @@ def test_plan_layout_for_another_room_or_missing_is_404(client):
 
 def test_plan_default_layout_id_is_403_for_students(client):
     default_id = db.execute(
-        "SELECT id FROM layouts WHERE room_type_id = ? AND user_id IS NULL", type_id("Single (sample)")
+        "SELECT id FROM layouts WHERE suite_type_id = ? AND user_id IS NULL", type_id("Single (sample)")
     )[0]["id"]
     log_in(client, add_user())
     assert client.get(f"/plan/{type_id('Single (sample)')}?layout={default_id}").status_code == 403

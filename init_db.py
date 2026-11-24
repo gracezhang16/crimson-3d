@@ -46,7 +46,7 @@ def build_database(url):
     db = SQL(url)
     slugs = load_furniture(db)
     for room_file in sorted(ROOMS_DIR.glob("*.json")):
-        load_room_type(db, room_file, slugs)
+        load_suite_type(db, room_file, slugs)
 
 
 def load_furniture(db):
@@ -63,7 +63,7 @@ def load_furniture(db):
     return slugs
 
 
-def load_room_type(db, room_file, slugs):
+def load_suite_type(db, room_file, slugs):
     """Insert one seed/rooms/*.json file: its dorm (if new), room type and default layout."""
     room = json.loads(room_file.read_text())
 
@@ -74,7 +74,7 @@ def load_room_type(db, room_file, slugs):
 
     dorm_id = get_or_create_dorm(db, room["dorm"])
     type_id = db.execute(
-        "INSERT INTO room_types (dorm_id, name, capacity, bathroom, geometry, status, "
+        "INSERT INTO suite_types (dorm_id, name, capacity, bathroom, geometry, status, "
         "measured_by, measured_on, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         dorm_id, room["name"], room["capacity"], room["bathroom"], json.dumps(room["geometry"]),
         room["status"], room["measured_by"], room["measured_on"], room["notes"],
@@ -82,7 +82,7 @@ def load_room_type(db, room_file, slugs):
 
     # A room type's default layout is the layouts row with no owner (SPEC.md 5).
     layout_id = db.execute(
-        "INSERT INTO layouts (user_id, room_type_id, name, is_default) VALUES (NULL, ?, ?, 1)",
+        "INSERT INTO layouts (user_id, suite_type_id, name, is_default) VALUES (NULL, ?, ?, 1)",
         type_id, "Default layout",
     )
     for placement in room["default_layout"]:

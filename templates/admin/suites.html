@@ -1,43 +1,43 @@
 {% extends "layout.html" %}
 
-{% block title %}Rooms · Admin{% endblock %}
+{% block title %}Suites · Admin{% endblock %}
 
 {% block main %}
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}">Admin</a></li>
-            <li class="breadcrumb-item active" aria-current="page">Rooms</li>
+            <li class="breadcrumb-item active" aria-current="page">Suites</li>
         </ol>
     </nav>
 
-    <h1 class="h3 mb-1">Rooms and students</h1>
+    <h1 class="h3 mb-1">Suites and students</h1>
     <p class="text-body-secondary small mb-3">
-        A room is a specific room, like Canaday B-21, pointing at the room type it's built like.
-        Assign a student here and "My room" opens it for them. Students must register first.
+        A suite is a specific suite, like Canaday B-21, pointing at the suite type it's built like.
+        Assign a student here and "My suite" opens it for them. Students must register first.
     </p>
 
     <div class="row g-4">
         <div class="col-lg-8">
-            {% if rooms %}
+            {% if suites %}
                 <div class="table-responsive">
                     <table class="table align-middle">
                         <thead>
                             <tr>
-                                <th scope="col">Room</th>
+                                <th scope="col">Suite</th>
                                 <th scope="col">Type</th>
                                 <th scope="col">Students</th>
                                 <th scope="col">Assign a student</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for room in rooms %}
+                            {% for room in suites %}
                                 <tr>
                                     <td class="text-nowrap">{{ room.dorm_name }} {{ room.number }}</td>
-                                    <td><a href="{{ url_for('admin.edit_room_type', type_id=room.type_id) }}">{{ room.type_name }}</a></td>
+                                    <td><a href="{{ url_for('admin.edit_suite_type', type_id=room.type_id) }}">{{ room.type_name }}</a></td>
                                     <td>
                                         {% for student in room.students %}
                                             <form class="d-flex align-items-center gap-1 mb-1" method="post"
-                                                  action="{{ url_for('admin.unassign_room', room_id=room.id) }}">
+                                                  action="{{ url_for('admin.unassign_suite', suite_id=room.id) }}">
                                                 <input type="hidden" name="user_id" value="{{ student.id }}">
                                                 <span class="small">{{ student.email }}</span>
                                                 <button type="submit" class="btn btn-sm btn-link text-danger p-0 ms-1"
@@ -50,7 +50,7 @@
                                     </td>
                                     <td>
                                         {% if room.students | length < room.capacity %}
-                                            <form class="d-flex gap-1" method="post" action="{{ url_for('admin.assign_room', room_id=room.id) }}">
+                                            <form class="d-flex gap-1" method="post" action="{{ url_for('admin.assign_suite', suite_id=room.id) }}">
                                                 <label class="visually-hidden" for="email-{{ room.id }}">Student email for {{ room.dorm_name }} {{ room.number }}</label>
                                                 <input id="email-{{ room.id }}" name="email" type="email" class="form-control form-control-sm"
                                                        placeholder="student@example.com" required>
@@ -66,18 +66,18 @@
                     </table>
                 </div>
             {% else %}
-                <p>No rooms yet. Add the first one.</p>
+                <p>No suites yet. Add the first one.</p>
             {% endif %}
         </div>
 
         <div class="col-lg-4">
-            <h2 class="h5">Add a room</h2>
-            <form method="post" action="{{ url_for('admin.rooms') }}">
+            <h2 class="h5">Add a suite</h2>
+            <form method="post" action="{{ url_for('admin.suites') }}">
                 <div class="mb-3">
-                    <label for="room_type_id" class="form-label">Room type</label>
+                    <label for="suite_type_id" class="form-label">Suite type</label>
                     {# <optgroup> groups the options under each dorm's name. The room's
                        dorm is taken from its type. #}
-                    <select id="room_type_id" name="room_type_id" class="form-select" required>
+                    <select id="suite_type_id" name="suite_type_id" class="form-select" required>
                         {% for dorm_name, dorm_types in types | groupby("dorm_name") %}
                             <optgroup label="{{ dorm_name }}">
                                 {% for type in dorm_types %}
@@ -88,10 +88,10 @@
                     </select>
                 </div>
                 <div class="mb-3">
-                    <label for="number" class="form-label">Room number</label>
+                    <label for="number" class="form-label">Suite number</label>
                     <input id="number" name="number" class="form-control" maxlength="20" required placeholder="e.g. B-21">
                 </div>
-                <button type="submit" class="btn btn-crimson">Add room</button>
+                <button type="submit" class="btn btn-crimson">Add suite</button>
             </form>
         </div>
     </div>

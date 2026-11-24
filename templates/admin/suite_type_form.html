@@ -3,23 +3,23 @@
 {# The room builder (Hannah), SPEC.md 9.1. builder/main.js turns the form into
    the room format, draws the live preview and fills the hidden "geometry"
    field. A2: shape and details. A3: features table. A4: save, edit, publish.
-   `room_type` is None for a new room type, or the saved row when editing. #}
+   `suite_type` is None for a new suite type, or the saved row when editing. #}
 
-{% block title %}{{ room_type.name if room_type else "New room type" }} · Admin{% endblock %}
+{% block title %}{{ suite_type.name if suite_type else "New suite type" }} · Admin{% endblock %}
 
 {% block main %}
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}">Admin</a></li>
-            <li class="breadcrumb-item"><a href="{{ url_for('admin.room_types') }}">Room types</a></li>
-            <li class="breadcrumb-item active" aria-current="page">{{ room_type.name if room_type else "New" }}</li>
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.suite_types') }}">Suite types</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ suite_type.name if suite_type else "New" }}</li>
         </ol>
     </nav>
 
     <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-        <h1 class="h3 mb-0 me-2">{{ room_type.name if room_type else "New room type" }}</h1>
-        {% if room_type %}
-            {% if room_type.status == "published" %}
+        <h1 class="h3 mb-0 me-2">{{ suite_type.name if suite_type else "New suite type" }}</h1>
+        {% if suite_type %}
+            {% if suite_type.status == "published" %}
                 <span class="badge text-bg-success">Published</span>
             {% else %}
                 <span class="badge text-bg-warning">Draft</span>
@@ -27,9 +27,9 @@
         {% endif %}
     </div>
 
-    {% if room_type and room_type.status == "published" %}
+    {% if suite_type and suite_type.status == "published" %}
         <div class="alert alert-warning" role="alert">
-            This room type is published. Saving changes what students see straight away.
+            This suite type is published. Saving changes what students see straight away.
         </div>
     {% endif %}
 
@@ -43,15 +43,15 @@
     {% endif %}
 
     {# data-geometry carries a saved (or just-submitted) room to main.js, which
-       fills the shape and features from it; empty for a new room type. #}
+       fills the shape and features from it; empty for a new suite type. #}
     <form id="room-type-form" method="post" novalidate
-          action="{{ url_for('admin.edit_room_type', type_id=room_type.id) if room_type else url_for('admin.new_room_type') }}"
+          action="{{ url_for('admin.edit_suite_type', type_id=suite_type.id) if suite_type else url_for('admin.new_suite_type') }}"
           data-geometry="{{ geometry_text }}">
         <input type="hidden" name="geometry" value="">
 
         <div class="row g-4">
             <div class="col-lg-7">
-                <h2 class="h5">Room</h2>
+                <h2 class="h5">Suite</h2>
                 <div class="row g-3 mb-4">
                     <div class="col-sm-6">
                         <label for="dorm_id" class="form-label">Dorm</label>
@@ -65,7 +65,7 @@
                     <div class="col-sm-6">
                         <label for="name" class="form-label">Name</label>
                         <input id="name" name="name" class="form-control" maxlength="60" required
-                               placeholder="e.g. Single, 4th floor" value="{{ values.name }}">
+                               placeholder="e.g. Two-bedroom suite" value="{{ values.name }}">
                     </div>
                     <div class="col-sm-6">
                         <label for="capacity" class="form-label">Capacity (students)</label>
@@ -178,12 +178,12 @@
                     </div>
                 </div>
                 <div class="d-flex flex-wrap gap-2 align-items-center">
-                    <button type="submit" class="btn btn-crimson">{{ "Save changes" if room_type else "Save draft" }}</button>
-                    {% if room_type %}
+                    <button type="submit" class="btn btn-crimson">{{ "Save changes" if suite_type else "Save draft" }}</button>
+                    {% if suite_type %}
                         {# Admins can open drafts in the planner (SPEC.md 9.1). #}
-                        <a class="btn btn-outline-secondary" href="{{ url_for('pages.plan', type_id=room_type.id) }}"
+                        <a class="btn btn-outline-secondary" href="{{ url_for('pages.plan', type_id=suite_type.id) }}"
                            target="_blank" rel="noopener">Preview in 3D</a>
-                        <a class="btn btn-outline-secondary" href="{{ url_for('admin.default_layout', type_id=room_type.id) }}">Default layout</a>
+                        <a class="btn btn-outline-secondary" href="{{ url_for('admin.default_layout', type_id=suite_type.id) }}">Default layout</a>
                     {% endif %}
                 </div>
                 {# Shown by main.js if Save is pressed while the preview lists problems. #}
@@ -207,18 +207,18 @@
         </div>
     </form>
 
-    {% if room_type %}
+    {% if suite_type %}
         {# Separate small forms, because forms can't be nested inside the builder form. #}
         <div class="card narrow-card mt-4">
             <div class="card-body">
-                {% if room_type.status == "published" %}
-                    <p class="mb-2">Students can find and open this room type.</p>
-                    <form action="{{ url_for('admin.unpublish_room_type', type_id=room_type.id) }}" method="post">
+                {% if suite_type.status == "published" %}
+                    <p class="mb-2">Students can find and open this suite type.</p>
+                    <form action="{{ url_for('admin.unpublish_suite_type', type_id=suite_type.id) }}" method="post">
                         <button type="submit" class="btn btn-outline-secondary">Unpublish (back to draft)</button>
                     </form>
                 {% else %}
                     <p class="mb-2">Only admins can see this draft. Publishing uses the last <em>saved</em> version.</p>
-                    <form action="{{ url_for('admin.publish_room_type', type_id=room_type.id) }}" method="post">
+                    <form action="{{ url_for('admin.publish_suite_type', type_id=suite_type.id) }}" method="post">
                         <button type="submit" class="btn btn-success">Publish</button>
                     </form>
                 {% endif %}

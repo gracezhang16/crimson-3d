@@ -76,14 +76,14 @@ def log_in(client, user_id):
 def test_bad_foreign_key_is_rejected():
     # We can't read "PRAGMA foreign_keys" back to check it: cs50.SQL returns
     # True for PRAGMA statements, not rows. So we prove it by behaviour.
-    # There is no dorm 9999 and no room type 9999, so SQLite must refuse the
+    # There is no dorm 9999 and no suite type 9999, so SQLite must refuse the
     # row. cs50.SQL turns SQLite's IntegrityError into a ValueError.
     with pytest.raises(ValueError):
         db.execute(
-            "INSERT INTO rooms (dorm_id, number, room_type_id) VALUES (?, ?, ?)",
+            "INSERT INTO suites (dorm_id, number, suite_type_id) VALUES (?, ?, ?)",
             9999, "Z-99", 9999,
         )
-    assert db.execute("SELECT COUNT(*) AS n FROM rooms WHERE number = 'Z-99'")[0]["n"] == 0
+    assert db.execute("SELECT COUNT(*) AS n FROM suites WHERE number = 'Z-99'")[0]["n"] == 0
 
 
 # --- apology ----------------------------------------------------------------

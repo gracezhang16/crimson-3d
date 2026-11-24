@@ -1,18 +1,18 @@
 {% extends "layout.html" %}
 
-{% block title %}Room types · Admin{% endblock %}
+{% block title %}Suite types · Admin{% endblock %}
 
 {% block main %}
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}">Admin</a></li>
-            <li class="breadcrumb-item active" aria-current="page">Room types</li>
+            <li class="breadcrumb-item active" aria-current="page">Suite types</li>
         </ol>
     </nav>
 
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1 class="h3 mb-0">Room types</h1>
-        <a class="btn btn-crimson" href="{{ url_for('admin.new_room_type') }}">New room type</a>
+        <h1 class="h3 mb-0">Suite types</h1>
+        <a class="btn btn-crimson" href="{{ url_for('admin.new_suite_type') }}">New suite type</a>
     </div>
 
     {% if types %}
@@ -20,11 +20,11 @@
             <table class="table align-middle">
                 <thead>
                     <tr>
-                        <th scope="col">Room type</th>
+                        <th scope="col">Suite type</th>
                         <th scope="col">Dorm</th>
                         <th scope="col">Status</th>
                         <th scope="col" class="text-end">Capacity</th>
-                        <th scope="col" class="text-end">Rooms</th>
+                        <th scope="col" class="text-end">Suites</th>
                         <th scope="col">Last updated (UTC)</th>
                         <th scope="col"><span class="visually-hidden">Actions</span></th>
                     </tr>
@@ -46,12 +46,12 @@
                             <td class="text-end">{{ type.room_count }}</td>
                             <td>{{ type.updated[:16] if type.updated else "" }}</td>
                             <td class="text-end text-nowrap">
-                                <a class="btn btn-sm btn-crimson" href="{{ url_for('admin.edit_room_type', type_id=type.id) }}">Edit</a>
+                                <a class="btn btn-sm btn-crimson" href="{{ url_for('admin.edit_suite_type', type_id=type.id) }}">Edit</a>
                                 <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('pages.plan', type_id=type.id) }}">3D</a>
                                 <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.default_layout', type_id=type.id) }}">Default layout</a>
                                 {# A button that changes data must POST, so each is a tiny form. #}
                                 <form class="d-inline" method="post"
-                                      action="{{ url_for('admin.unpublish_room_type' if type.status == 'published' else 'admin.publish_room_type', type_id=type.id) }}">
+                                      action="{{ url_for('admin.unpublish_suite_type' if type.status == 'published' else 'admin.publish_suite_type', type_id=type.id) }}">
                                     <button type="submit" class="btn btn-sm btn-outline-secondary">
                                         {{ "Unpublish" if type.status == "published" else "Publish" }}
                                     </button>
@@ -63,6 +63,6 @@
             </table>
         </div>
     {% else %}
-        <p>No room types yet.</p>
+        <p>No suite types yet.</p>
     {% endif %}
 {% endblock %}

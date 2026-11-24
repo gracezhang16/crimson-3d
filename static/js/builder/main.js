@@ -1,5 +1,5 @@
 /**
- * Room builder page (templates/admin/room_type_form.html). Hannah.
+ * Room builder page (templates/admin/suite_type_form.html). Hannah.
  *
  * Form state (shape, walls, features) -> room-format object -> live SVG
  * preview and inline errors, on every keystroke.

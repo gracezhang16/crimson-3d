@@ -15,7 +15,7 @@
         {# A plain GET form: submitting it reloads this page with ?q=... in the URL,
            so search works without JavaScript and results can be bookmarked. #}
         <form action="{{ url_for('pages.index') }}" method="get" role="search" class="hero-search">
-            <label for="q" class="visually-hidden">Search dorms and room types</label>
+            <label for="q" class="visually-hidden">Search dorms and suite types</label>
             <div class="input-group input-group-lg">
                 <input id="q" name="q" type="search" class="form-control" value="{{ query }}"
                        placeholder="e.g. Canaday, double" autocomplete="off">
@@ -74,7 +74,7 @@
             <a href="{{ url_for('pages.index') }}" class="small">Clear search</a>
         </div>
 
-        {% if not dorms and not room_types %}
+        {% if not dorms and not suite_types %}
             <p>Nothing matches “{{ query }}”. Try part of a dorm name, or a word like “single”.</p>
         {% endif %}
 
@@ -83,12 +83,12 @@
             {% include "_dorm_list.html" %}
         {% endif %}
 
-        {% if room_types %}
-            <h3 class="h6 text-body-secondary text-uppercase">Room types</h3>
+        {% if suite_types %}
+            <h3 class="h6 text-body-secondary text-uppercase">Suite types</h3>
             <div class="list-group mb-4">
-                {% for type in room_types %}
+                {% for type in suite_types %}
                     <a class="list-group-item list-group-item-action"
-                       href="{{ url_for('pages.room_type', type_id=type.id) }}">
+                       href="{{ url_for('pages.suite_type', type_id=type.id) }}">
                         {{ type.name }}
                         <span class="text-body-secondary small">· {{ type.dorm_name }}</span>
                         {% if type.status == "draft" %}<span class="badge text-bg-warning ms-1">Draft</span>{% endif %}

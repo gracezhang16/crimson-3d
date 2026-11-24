@@ -68,9 +68,9 @@ def json_error(message, code=400):
 def current_user():
     """Return the logged-in user's row as a dict, or None if nobody is logged in.
 
-    The row has id, email, role, created, and room_id: the id of the room an
+    The row has id, email, role, created, and suite_id: the id of the room an
     admin assigned them, or None. (A LEFT JOIN keeps users who have no
-    assignment, filling room_id with NULL.) It deliberately leaves out the
+    assignment, filling suite_id with NULL.) It deliberately leaves out the
     password hash, so it is safe to pass to a template. It is also None if the
     session names a user who no longer exists (e.g. after a database rebuild).
     """
@@ -78,7 +78,7 @@ def current_user():
     if user_id is None:
         return None
     rows = db.execute(
-        "SELECT users.id, users.email, users.role, users.created, assignments.room_id "
+        "SELECT users.id, users.email, users.role, users.created, assignments.suite_id "
         "FROM users LEFT JOIN assignments ON assignments.user_id = users.id "
         "WHERE users.id = ?",
         user_id,
@@ -92,11 +92,11 @@ def viewer_is_admin():
     return user is not None and user["role"] == "admin"
 
 
-# SQL condition for "this room type may be shown to the viewer", used by every
-# query that lists or opens room types for pages and the API. The ? is 1 for
+# SQL condition for "this suite type may be shown to the viewer", used by every
+# query that lists or opens suite types for pages and the API. The ? is 1 for
 # admins (who also see drafts) and 0 for everyone else (SPEC.md 7.1). Pass
 # int(viewer_is_admin()) for it.
-VISIBLE_TYPE = "(room_types.status = 'published' OR ?)"
+VISIBLE_TYPE = "(suite_types.status = 'published' OR ?)"
 
 
 def login_required(f):

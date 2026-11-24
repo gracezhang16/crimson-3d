@@ -11,7 +11,7 @@ from helpers import (VISIBLE_TYPE, apology, check_new_account, db, login_require
 
 pages = Blueprint("pages", __name__)
 
-# How each `room_types.bathroom` value is shown to students.
+# How each `suite_types.bathroom` value is shown to students.
 BATHROOM_LABELS = {
     "en-suite": "En-suite (in the room)",
     "hallway": "Shared hallway bathroom",
@@ -61,11 +61,11 @@ def room_facts(geometry):
     }
 
 
-def with_facts(room_type):
-    """Add `facts` and `bathroom_label` to a room_types row (a dict) and return it."""
-    room_type["facts"] = room_facts(json.loads(room_type["geometry"]))
-    room_type["bathroom_label"] = BATHROOM_LABELS.get(room_type["bathroom"], "Not recorded")
-    return room_type
+def with_facts(suite_type):
+    """Add `facts` and `bathroom_label` to a suite_types row (a dict) and return it."""
+    suite_type["facts"] = room_facts(json.loads(suite_type["geometry"]))
+    suite_type["bathroom_label"] = BATHROOM_LABELS.get(suite_type["bathroom"], "Not recorded")
+    return suite_type
 
 
 def like_pattern(text):
@@ -80,22 +80,22 @@ def like_pattern(text):
 
 
 # ---------------------------------------------------------------------------
-# Browsing: home, dorm, room type
+# Browsing: home, dorm, suite type
 # ---------------------------------------------------------------------------
 
 @pages.route("/")
 def index():
-    """List dorms, or with ?q=... show dorms and room types whose names match.
+    """List dorms, or with ?q=... show dorms and suite types whose names match.
 
-    Only dorms with at least one room type the viewer may see are listed.
+    Only dorms with at least one suite type the viewer may see are listed.
     """
     query = (request.args.get("q") or "").strip()
     admin = int(viewer_is_admin())
 
     if not query:
         dorms = db.execute(
-            "SELECT dorms.id, dorms.name, dorms.yard, COUNT(room_types.id) AS type_count "
-            "FROM dorms JOIN room_types ON room_types.dorm_id = dorms.id "
+            "SELECT dorms.id, dorms.name, dorms.yard, COUNT(suite_types.id) AS type_count "
+            "FROM dorms JOIN suite_types ON suite_types.dorm_id = dorms.id "
             f"WHERE {VISIBLE_TYPE} "
             "GROUP BY dorms.id ORDER BY dorms.name",
             admin,
@@ -104,60 +104,60 @@ def index():
 
     pattern = like_pattern(query)
     dorms = db.execute(
-        "SELECT dorms.id, dorms.name, dorms.yard, COUNT(room_types.id) AS type_count "
-        "FROM dorms JOIN room_types ON room_types.dorm_id = dorms.id "
+        "SELECT dorms.id, dorms.name, dorms.yard, COUNT(suite_types.id) AS type_count "
+        "FROM dorms JOIN suite_types ON suite_types.dorm_id = dorms.id "
         f"WHERE {VISIBLE_TYPE} AND dorms.name LIKE ? ESCAPE '\\' "
         "GROUP BY dorms.id ORDER BY dorms.name",
         admin, pattern,
     )
-    room_types = db.execute(
-        "SELECT room_types.id, room_types.name, room_types.status, dorms.name AS dorm_name "
-        "FROM room_types JOIN dorms ON dorms.id = room_types.dorm_id "
-        f"WHERE {VISIBLE_TYPE} AND room_types.name LIKE ? ESCAPE '\\' "
-        "ORDER BY dorms.name, room_types.name",
+    suite_types = db.execute(
+        "SELECT suite_types.id, suite_types.name, suite_types.status, dorms.name AS dorm_name "
+        "FROM suite_types JOIN dorms ON dorms.id = suite_types.dorm_id "
+        f"WHERE {VISIBLE_TYPE} AND suite_types.name LIKE ? ESCAPE '\\' "
+        "ORDER BY dorms.name, suite_types.name",
         admin, pattern,
     )
-    return render_template("index.html", dorms=dorms, room_types=room_types, query=query)
+    return render_template("index.html", dorms=dorms, suite_types=suite_types, query=query)
 
 
 @pages.route("/dorms/<int:dorm_id>")
 def dorm(dorm_id):
-    """Show one dorm and its room types as cards (drafts only for admins)."""
+    """Show one dorm and its suite types as cards (drafts only for admins)."""
     rows = db.execute("SELECT id, name, yard, description FROM dorms WHERE id = ?", dorm_id)
     if not rows:
         return apology("We couldn't find that dorm.", 404)
 
-    room_types = db.execute(
-        "SELECT id, name, capacity, bathroom, geometry, status FROM room_types "
+    suite_types = db.execute(
+        "SELECT id, name, capacity, bathroom, geometry, status FROM suite_types "
         f"WHERE dorm_id = ? AND {VISIBLE_TYPE} ORDER BY capacity, name",
         dorm_id, int(viewer_is_admin()),
     )
     return render_template(
-        "dorm.html", dorm=rows[0], room_types=[with_facts(row) for row in room_types]
+        "dorm.html", dorm=rows[0], suite_types=[with_facts(row) for row in suite_types]
     )
 
 
 @pages.route("/types/<int:type_id>")
-def room_type(type_id):
-    """Show the facts card for one room type.
+def suite_type(type_id):
+    """Show the facts card for one suite type.
 
-    A draft gives the same 404 as a missing room type, so visitors can't
+    A draft gives the same 404 as a missing suite type, so visitors can't
     tell that unpublished rooms exist.
     """
     rows = db.execute(
-        "SELECT room_types.*, dorms.name AS dorm_name "
-        "FROM room_types JOIN dorms ON dorms.id = room_types.dorm_id "
-        f"WHERE room_types.id = ? AND {VISIBLE_TYPE}",
+        "SELECT suite_types.*, dorms.name AS dorm_name "
+        "FROM suite_types JOIN dorms ON dorms.id = suite_types.dorm_id "
+        f"WHERE suite_types.id = ? AND {VISIBLE_TYPE}",
         type_id, int(viewer_is_admin()),
     )
     if not rows:
-        return apology("We couldn't find that room type.", 404)
-    return render_template("room_type.html", room_type=with_facts(rows[0]))
+        return apology("We couldn't find that suite type.", 404)
+    return render_template("suite_type.html", suite_type=with_facts(rows[0]))
 
 
 @pages.route("/plan/<int:type_id>")
 def plan(type_id):
-    """Open a room type in the 3D planner (the page and its JavaScript are Claire's).
+    """Open a suite type in the 3D planner (the page and its JavaScript are Claire's).
 
     The page passes everything the JavaScript needs through data-* attributes
     on #planner (SPEC.md 8.1); the planner then loads the room itself from
@@ -168,57 +168,57 @@ def plan(type_id):
     and a missing layout or one for a different room is 404.
     """
     rows = db.execute(
-        "SELECT room_types.id, room_types.name, room_types.status, "
+        "SELECT suite_types.id, suite_types.name, suite_types.status, "
         "dorms.id AS dorm_id, dorms.name AS dorm_name "
-        "FROM room_types JOIN dorms ON dorms.id = room_types.dorm_id "
-        f"WHERE room_types.id = ? AND {VISIBLE_TYPE}",
+        "FROM suite_types JOIN dorms ON dorms.id = suite_types.dorm_id "
+        f"WHERE suite_types.id = ? AND {VISIBLE_TYPE}",
         type_id, int(viewer_is_admin()),
     )
     if not rows:
-        return apology("We couldn't find that room type.", 404)
+        return apology("We couldn't find that suite type.", 404)
 
     layout_id = request.args.get("layout", type=int)
     if "layout" in request.args:
         if session.get("user_id") is None:
             return redirect("/login")
         layouts = db.execute(
-            "SELECT user_id FROM layouts WHERE id = ? AND room_type_id = ?", layout_id, type_id
+            "SELECT user_id FROM layouts WHERE id = ? AND suite_type_id = ?", layout_id, type_id
         )
         if layout_id is None or not layouts:
             return apology("We couldn't find that layout.", 404)
         if layouts[0]["user_id"] != session["user_id"]:
             return apology("That layout belongs to someone else.", 403)
 
-    return render_template("plan.html", room_type=rows[0], layout_id=layout_id or "", mode="edit")
+    return render_template("plan.html", suite_type=rows[0], layout_id=layout_id or "", mode="edit")
 
 
 # ---------------------------------------------------------------------------
 # Student pages: my room, my layouts
 # ---------------------------------------------------------------------------
 
-@pages.route("/my-room")
+@pages.route("/my-suite")
 @login_required
-def my_room():
+def my_suite():
     """Send a student to the planner for the room an admin assigned them.
 
     With no assignment, or while the room's type is still a draft (and the
     viewer isn't an admin), show a page explaining that instead.
     """
     rows = db.execute(
-        "SELECT rooms.number, rooms.room_type_id, room_types.status, dorms.name AS dorm_name "
+        "SELECT suites.number, suites.suite_type_id, suite_types.status, dorms.name AS dorm_name "
         "FROM assignments "
-        "JOIN rooms ON rooms.id = assignments.room_id "
-        "JOIN room_types ON room_types.id = rooms.room_type_id "
-        "JOIN dorms ON dorms.id = rooms.dorm_id "
+        "JOIN suites ON suites.id = assignments.suite_id "
+        "JOIN suite_types ON suite_types.id = suites.suite_type_id "
+        "JOIN dorms ON dorms.id = suites.dorm_id "
         "WHERE assignments.user_id = ?",
         session["user_id"],
     )
     if not rows:
-        return render_template("my_room.html", room=None)
+        return render_template("my_suite.html", room=None)
     room = rows[0]
     if room["status"] == "published" or viewer_is_admin():
-        return redirect(url_for("pages.plan", type_id=room["room_type_id"]))
-    return render_template("my_room.html", room=room)
+        return redirect(url_for("pages.plan", type_id=room["suite_type_id"]))
+    return render_template("my_suite.html", room=room)
 
 
 @pages.route("/layouts")
@@ -227,16 +227,16 @@ def my_layouts():
     """List the student's saved layouts across all rooms, newest first.
 
     Rename and delete happen in the browser (static/js/layouts.js) through the
-    layouts API, so this route only reads. Layouts whose room type has gone
+    layouts API, so this route only reads. Layouts whose suite type has gone
     back to draft are hidden, as in the API (see docs/decisions.md, S5).
     """
     layouts = db.execute(
-        "SELECT layouts.id, layouts.name, layouts.updated, layouts.room_type_id, "
-        "room_types.name AS type_name, dorms.name AS dorm_name, "
+        "SELECT layouts.id, layouts.name, layouts.updated, layouts.suite_type_id, "
+        "suite_types.name AS type_name, dorms.name AS dorm_name, "
         "COUNT(placements.id) AS item_count "
         "FROM layouts "
-        "JOIN room_types ON room_types.id = layouts.room_type_id "
-        "JOIN dorms ON dorms.id = room_types.dorm_id "
+        "JOIN suite_types ON suite_types.id = layouts.suite_type_id "
+        "JOIN dorms ON dorms.id = suite_types.dorm_id "
         "LEFT JOIN placements ON placements.layout_id = layouts.id "
         f"WHERE layouts.user_id = ? AND {VISIBLE_TYPE} "
         "GROUP BY layouts.id ORDER BY layouts.updated DESC, layouts.id DESC",

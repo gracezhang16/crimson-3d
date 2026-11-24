@@ -62,37 +62,37 @@ def layout_placements(layout_id):
 
 @api.route("/types/<int:type_id>")
 def get_type(type_id):
-    """Return a room type with its geometry and default layout.
+    """Return a suite type with its geometry and default layout.
 
     Drafts are visible to admins only; anyone else gets the same 404 as for a
-    missing room type.
+    missing suite type.
     """
     rows = db.execute(
-        "SELECT room_types.id, room_types.name, room_types.capacity, room_types.geometry, "
+        "SELECT suite_types.id, suite_types.name, suite_types.capacity, suite_types.geometry, "
         "dorms.id AS dorm_id, dorms.name AS dorm_name "
-        "FROM room_types JOIN dorms ON dorms.id = room_types.dorm_id "
-        f"WHERE room_types.id = ? AND {VISIBLE_TYPE}",
+        "FROM suite_types JOIN dorms ON dorms.id = suite_types.dorm_id "
+        f"WHERE suite_types.id = ? AND {VISIBLE_TYPE}",
         type_id, int(viewer_is_admin()),
     )
     if not rows:
-        return json_error("We couldn't find that room type.", 404)
-    room_type = rows[0]
+        return json_error("We couldn't find that suite type.", 404)
+    suite_type = rows[0]
 
-    # The default layout is the one with no owner (SPEC.md 5). A room type
+    # The default layout is the one with no owner (SPEC.md 5). A suite type
     # may not have one yet, in which case the planner starts empty.
     defaults = db.execute(
-        "SELECT id FROM layouts WHERE room_type_id = ? AND user_id IS NULL AND is_default = 1",
+        "SELECT id FROM layouts WHERE suite_type_id = ? AND user_id IS NULL AND is_default = 1",
         type_id,
     )
     placements = layout_placements(defaults[0]["id"]) if defaults else []
 
     return jsonify({
-        "id": room_type["id"],
-        "name": room_type["name"],
-        "dorm": {"id": room_type["dorm_id"], "name": room_type["dorm_name"]},
-        "capacity": room_type["capacity"],
+        "id": suite_type["id"],
+        "name": suite_type["name"],
+        "dorm": {"id": suite_type["dorm_id"], "name": suite_type["dorm_name"]},
+        "capacity": suite_type["capacity"],
         # Stored as JSON text; parse it so the client gets an object, not a string.
-        "geometry": json.loads(room_type["geometry"]),
+        "geometry": json.loads(suite_type["geometry"]),
         "default_layout": {"placements": placements},
     })
 
@@ -125,9 +125,9 @@ def read_json_body():
 
 
 def visible_room_geometry(type_id):
-    """Return the geometry dict of a room type the viewer may see, or None."""
+    """Return the geometry dict of a suite type the viewer may see, or None."""
     rows = db.execute(
-        f"SELECT geometry FROM room_types WHERE id = ? AND {VISIBLE_TYPE}",
+        f"SELECT geometry FROM suite_types WHERE id = ? AND {VISIBLE_TYPE}",
         type_id, int(viewer_is_admin()),
     )
     return json.loads(rows[0]["geometry"]) if rows else None
@@ -144,14 +144,14 @@ def owned_layout(layout_id):
     """Look up a layout the logged-in user owns.
 
     Returns (layout row, None) if found, or (None, JSON error response):
-    404 if there is no such layout, or its room type isn't visible to the
-    viewer; 403 if it belongs to someone else. A room type's default layout
+    404 if there is no such layout, or its suite type isn't visible to the
+    viewer; 403 if it belongs to someone else. A suite type's default layout
     has no owner, so it is 403 here too; admins save it through /admin/api.
     """
     rows = db.execute(
-        "SELECT layouts.id, layouts.user_id, layouts.room_type_id, layouts.name, "
-        "layouts.share_token, room_types.geometry "
-        "FROM layouts JOIN room_types ON room_types.id = layouts.room_type_id "
+        "SELECT layouts.id, layouts.user_id, layouts.suite_type_id, layouts.name, "
+        "layouts.share_token, suite_types.geometry "
+        "FROM layouts JOIN suite_types ON suite_types.id = layouts.suite_type_id "
         f"WHERE layouts.id = ? AND {VISIBLE_TYPE}",
         layout_id, int(viewer_is_admin()),
     )
@@ -173,15 +173,15 @@ def share_url(token):
 @api.route("/layouts")
 @api_login_required
 def list_layouts():
-    """List the logged-in student's layouts for one room type, newest first."""
+    """List the logged-in student's layouts for one suite type, newest first."""
     # type=int makes Flask return None if type_id is missing or not a number.
     type_id = request.args.get("type_id", type=int)
     if type_id is None:
-        return json_error("Add ?type_id= with a room type id.", 400)
+        return json_error("Add ?type_id= with a suite type id.", 400)
     if visible_room_geometry(type_id) is None:
-        return json_error("We couldn't find that room type.", 404)
+        return json_error("We couldn't find that suite type.", 404)
     return jsonify(db.execute(
-        "SELECT id, name, updated FROM layouts WHERE user_id = ? AND room_type_id = ? "
+        "SELECT id, name, updated FROM layouts WHERE user_id = ? AND suite_type_id = ? "
         "ORDER BY updated DESC, id DESC",
         session["user_id"], type_id,
     ))
@@ -197,10 +197,10 @@ def create_layout():
 
     type_id = body.get("type_id")
     if not isinstance(type_id, int) or isinstance(type_id, bool):
-        return json_error("type_id must be a room type id.", 400)
+        return json_error("type_id must be a suite type id.", 400)
     geometry = visible_room_geometry(type_id)
     if geometry is None:
-        return json_error("We couldn't find that room type.", 404)
+        return json_error("We couldn't find that suite type.", 404)
 
     name, error = clean_layout_name(body.get("name"))
     placements = body.get("placements")
@@ -209,7 +209,7 @@ def create_layout():
         return json_error(error, 400)
 
     count = db.execute(
-        "SELECT COUNT(*) AS n FROM layouts WHERE user_id = ? AND room_type_id = ?",
+        "SELECT COUNT(*) AS n FROM layouts WHERE user_id = ? AND suite_type_id = ?",
         session["user_id"], type_id,
     )[0]["n"]
     if count >= MAX_LAYOUTS_PER_TYPE:
@@ -220,7 +220,7 @@ def create_layout():
 
     def save():
         layout_id = db.execute(
-            "INSERT INTO layouts (user_id, room_type_id, name) VALUES (?, ?, ?)",
+            "INSERT INTO layouts (user_id, suite_type_id, name) VALUES (?, ?, ?)",
             session["user_id"], type_id, name,
         )
         insert_placements(layout_id, placements)
@@ -239,7 +239,7 @@ def get_layout(layout_id):
     return jsonify({
         "id": layout["id"],
         "name": layout["name"],
-        "type_id": layout["room_type_id"],
+        "type_id": layout["suite_type_id"],
         "placements": layout_placements(layout_id),
         "share_url": share_url(layout["share_token"]),
     })

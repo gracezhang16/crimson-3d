@@ -52,12 +52,12 @@
             </button>
             <div class="collapse navbar-collapse" id="navbar">
                 <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link {{ 'active' if endpoint in ('pages.index', 'pages.dorm', 'pages.room_type') }}"
+                    <li class="nav-item"><a class="nav-link {{ 'active' if endpoint in ('pages.index', 'pages.dorm', 'pages.suite_type') }}"
                         href="{{ url_for('pages.index') }}" {% if endpoint == 'pages.index' %}aria-current="page"{% endif %}>Dorms</a></li>
                     {% if user %}
-                        {# "My room" only for students an admin has assigned a room (SPEC.md 1). #}
-                        {% if user.room_id %}
-                            <li class="nav-item"><a class="nav-link {{ 'active' if endpoint == 'pages.my_room' }}" href="{{ url_for('pages.my_room') }}">My room</a></li>
+                        {# "My suite" only for students an admin has assigned a room (SPEC.md 1). #}
+                        {% if user.suite_id %}
+                            <li class="nav-item"><a class="nav-link {{ 'active' if endpoint == 'pages.my_suite' }}" href="{{ url_for('pages.my_suite') }}">My suite</a></li>
                         {% endif %}
                         <li class="nav-item"><a class="nav-link {{ 'active' if endpoint == 'pages.my_layouts' }}"
                             href="{{ url_for('pages.my_layouts') }}" {% if endpoint == 'pages.my_layouts' %}aria-current="page"{% endif %}>My layouts</a></li>

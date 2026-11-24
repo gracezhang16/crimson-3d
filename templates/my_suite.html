@@ -1,21 +1,21 @@
 {% extends "layout.html" %}
 
-{% block title %}My room{% endblock %}
+{% block title %}My suite{% endblock %}
 
 {% block main %}
     <div class="narrow-card">
-        <h1 class="h3 mb-3">My room</h1>
+        <h1 class="h3 mb-3">My suite</h1>
         {% if room %}
-            {# Assigned, but the room type is still a draft. #}
+            {# Assigned, but the suite type is still a draft. #}
             <p>
                 You're assigned to <strong>{{ room.dorm_name }} {{ room.number }}</strong>,
                 but its 3D model isn't published yet. Check back soon.
             </p>
         {% else %}
-            <p>No room has been assigned to your account yet.</p>
+            <p>No suite has been assigned to your account yet.</p>
             <p class="text-body-secondary">
                 Once housing tells you your room, an admin can link it to your account, and this page
-                will open it in 3D. Until then, you can try out any room type.
+                will open it in 3D. Until then, you can try out any suite type.
             </p>
         {% endif %}
         <a class="btn btn-crimson" href="{{ url_for('pages.index') }}">Browse dorms</a>

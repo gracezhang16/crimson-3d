@@ -1,28 +1,28 @@
 {% extends "layout.html" %}
 
-{% set facts = room_type.facts %}
+{% set facts = suite_type.facts %}
 
-{% block title %}{{ room_type.name }} · {{ room_type.dorm_name }}{% endblock %}
+{% block title %}{{ suite_type.name }} · {{ suite_type.dorm_name }}{% endblock %}
 
 {% block main %}
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ url_for('pages.index') }}">Dorms</a></li>
-            <li class="breadcrumb-item"><a href="{{ url_for('pages.dorm', dorm_id=room_type.dorm_id) }}">{{ room_type.dorm_name }}</a></li>
-            <li class="breadcrumb-item active" aria-current="page">{{ room_type.name }}</li>
+            <li class="breadcrumb-item"><a href="{{ url_for('pages.dorm', dorm_id=suite_type.dorm_id) }}">{{ suite_type.dorm_name }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ suite_type.name }}</li>
         </ol>
     </nav>
 
-    {% if room_type.status == "draft" %}
+    {% if suite_type.status == "draft" %}
         <div class="alert alert-warning" role="alert">
-            This room type is a draft. Only admins can see it until it is published.
+            This suite type is a draft. Only admins can see it until it is published.
         </div>
     {% endif %}
 
     <div class="card narrow-card">
         <div class="card-body">
-            <h1 class="h3 card-title mb-1">{{ room_type.name }}</h1>
-            <p class="text-body-secondary">{{ room_type.dorm_name }}</p>
+            <h1 class="h3 card-title mb-1">{{ suite_type.name }}</h1>
+            <p class="text-body-secondary">{{ suite_type.dorm_name }}</p>
 
             {# A description list: each <dt> is a label, each <dd> its value. #}
             <dl class="row mb-0">
@@ -39,10 +39,10 @@
                 <dd class="col-7">{{ facts.ceiling | feet_inches }} <span class="text-body-secondary">({{ facts.ceiling }} in)</span></dd>
 
                 <dt class="col-5">Capacity</dt>
-                <dd class="col-7">{{ room_type.capacity }} student{{ "s" if room_type.capacity != 1 }}</dd>
+                <dd class="col-7">{{ suite_type.capacity }} student{{ "s" if suite_type.capacity != 1 }}</dd>
 
                 <dt class="col-5">Bathroom</dt>
-                <dd class="col-7">{{ room_type.bathroom_label }}</dd>
+                <dd class="col-7">{{ suite_type.bathroom_label }}</dd>
 
                 <dt class="col-5">Storage</dt>
                 <dd class="col-7">{{ "Built-in closet" if facts.has_closet else "No closet; Harvard provides a wardrobe" }}</dd>
@@ -51,20 +51,20 @@
                 <dd class="col-7">{{ facts.windows }}</dd>
             </dl>
 
-            {% if room_type.notes %}
-                <p class="mt-3 mb-0">{{ room_type.notes }}</p>
+            {% if suite_type.notes %}
+                <p class="mt-3 mb-0">{{ suite_type.notes }}</p>
             {% endif %}
         </div>
         <div class="card-footer bg-transparent">
-            <a class="btn btn-crimson" href="{{ url_for('pages.plan', type_id=room_type.id) }}">Open in 3D</a>
+            <a class="btn btn-crimson" href="{{ url_for('pages.plan', type_id=suite_type.id) }}">Open in 3D</a>
         </div>
     </div>
 
     {# Accuracy note required on every facts page (SPEC.md 7.1). The date is
        left out when it wasn't recorded, as for the sample rooms. #}
     <p class="small text-body-secondary mt-3 narrow-card">
-        {% if room_type.measured_by %}
-            Measured by {{ room_type.measured_by }}{% if room_type.measured_on %} on {{ room_type.measured_on }}{% endif %}.
+        {% if suite_type.measured_by %}
+            Measured by {{ suite_type.measured_by }}{% if suite_type.measured_on %} on {{ suite_type.measured_on }}{% endif %}.
         {% endif %}
         Rooms of the same type can differ by a few inches; measure big purchases against your own room.
     </p>

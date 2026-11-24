@@ -1,4 +1,4 @@
-"""Tests for the admin blueprint (Hannah): A1 admin home and room types list,
+"""Tests for the admin blueprint (Hannah): A1 admin home and suite types list,
 A2 builder form and dorms page.
 
 The guard tests don't list admin URLs by hand. They read Flask's route table
@@ -60,13 +60,13 @@ def test_admin_home_shows_counts(client):
     response = client.get("/admin")
     assert response.status_code == 200
     page = response.get_data(as_text=True)
-    assert "Published room types" in page
+    assert "Published suite types" in page
     assert '<div class="fs-3 fw-semibold">2</div>' in page   # the two Demo Hall rooms
     assert 'href="/admin/types"' in page
 
 
-def test_room_types_list_includes_drafts(client):
-    db.execute("UPDATE room_types SET status = 'draft' WHERE name = 'Single (sample)'")
+def test_suite_types_list_includes_drafts(client):
+    db.execute("UPDATE suite_types SET status = 'draft' WHERE name = 'Single (sample)'")
     log_in(client, "admin")
     response = client.get("/admin/types")
     assert response.status_code == 200
@@ -188,10 +188,10 @@ def admin_client(client):
     return client
 
 
-def test_save_new_room_type_as_draft(client):
+def test_save_new_suite_type_as_draft(client):
     response = admin_client(client).post("/admin/types/new", data=builder_form())
     assert response.status_code == 302
-    row = db.execute("SELECT * FROM room_types WHERE name = 'L-shaped single'")[0]
+    row = db.execute("SELECT * FROM suite_types WHERE name = 'L-shaped single'")[0]
     assert response.headers["Location"] == f"/admin/types/{row['id']}/edit"
     assert row["status"] == "draft"
     assert row["bathroom"] == "hallway" and row["measured_on"] == "2026-09-01"
@@ -203,7 +203,7 @@ def test_save_new_room_type_as_draft(client):
 
 def test_saved_draft_opens_in_the_planner_for_admins_only(client):
     admin_client(client).post("/admin/types/new", data=builder_form())
-    type_id = db.execute("SELECT id FROM room_types WHERE name = 'L-shaped single'")[0]["id"]
+    type_id = db.execute("SELECT id FROM suite_types WHERE name = 'L-shaped single'")[0]["id"]
     assert client.get(f"/plan/{type_id}").status_code == 200
     assert client.get(f"/api/types/{type_id}").get_json()["geometry"] == L_ROOM
     client.get("/logout")
@@ -218,7 +218,7 @@ def test_server_rejects_window_wider_than_wall_with_readable_message(client):
     assert "Window 1 is wider than wall B (80 in on a 60 in wall)." in page
     assert 'value="L-shaped single"' in page               # what was typed is kept
     assert "data-geometry=" in page and "&#34;window&#34;" in page   # and so is the shape
-    assert db.execute("SELECT COUNT(*) AS n FROM room_types")[0]["n"] == 2
+    assert db.execute("SELECT COUNT(*) AS n FROM suite_types")[0]["n"] == 2
 
 
 @pytest.mark.parametrize("changes, message", [
@@ -243,41 +243,41 @@ def test_save_validates_every_field(client, changes, message):
 def test_duplicate_name_in_the_same_dorm(client):
     response = admin_client(client).post("/admin/types/new", data=builder_form(name="Single (sample)"))
     assert response.status_code == 400
-    assert "Demo Hall already has a room type called Single (sample)." in response.get_data(as_text=True)
+    assert "Demo Hall already has a suite type called Single (sample)." in response.get_data(as_text=True)
 
 
 def test_edit_page_is_filled_from_the_database(client):
-    single = db.execute("SELECT id FROM room_types WHERE name = 'Single (sample)'")[0]["id"]
+    single = db.execute("SELECT id FROM suite_types WHERE name = 'Single (sample)'")[0]["id"]
     page = admin_client(client).get(f"/admin/types/{single}/edit").get_data(as_text=True)
     assert 'value="Single (sample)"' in page
     assert 'value="hallway" selected' in page
     assert "data-geometry=" in page and "&#34;outline&#34;" in page
-    assert "This room type is published" in page          # warning before editing live rooms
+    assert "This suite type is published" in page          # warning before editing live rooms
     assert f'href="/plan/{single}"' in page                # Preview in 3D
     assert "Unpublish" in page
 
 
 def test_edit_saves_changes(client):
-    single = db.execute("SELECT id FROM room_types WHERE name = 'Single (sample)'")[0]["id"]
+    single = db.execute("SELECT id FROM suite_types WHERE name = 'Single (sample)'")[0]["id"]
     response = admin_client(client).post(f"/admin/types/{single}/edit", data=builder_form(name="Single, renamed"))
     assert response.status_code == 302
-    row = db.execute("SELECT name, status, geometry FROM room_types WHERE id = ?", single)[0]
+    row = db.execute("SELECT name, status, geometry FROM suite_types WHERE id = ?", single)[0]
     assert row["name"] == "Single, renamed"
     assert row["status"] == "published"                    # editing doesn't unpublish
     assert json.loads(row["geometry"]) == L_ROOM
 
 
-def test_edit_missing_room_type_is_404(client):
+def test_edit_missing_suite_type_is_404(client):
     assert admin_client(client).get("/admin/types/9999/edit").status_code == 404
 
 
 def test_publish_and_unpublish(client):
     admin_client(client).post("/admin/types/new", data=builder_form())
-    type_id = db.execute("SELECT id FROM room_types WHERE name = 'L-shaped single'")[0]["id"]
+    type_id = db.execute("SELECT id FROM suite_types WHERE name = 'L-shaped single'")[0]["id"]
 
     response = client.post(f"/admin/types/{type_id}/publish")
     assert response.status_code == 302
-    assert db.execute("SELECT status FROM room_types WHERE id = ?", type_id)[0]["status"] == "published"
+    assert db.execute("SELECT status FROM suite_types WHERE id = ?", type_id)[0]["status"] == "published"
     client.get("/logout")
     assert client.get(f"/types/{type_id}").status_code == 200   # students can see it now
 
@@ -285,23 +285,23 @@ def test_publish_and_unpublish(client):
     with client.session_transaction() as session:   # log the same admin back in
         session["user_id"] = admin_id
     client.post(f"/admin/types/{type_id}/unpublish")
-    assert db.execute("SELECT status FROM room_types WHERE id = ?", type_id)[0]["status"] == "draft"
+    assert db.execute("SELECT status FROM suite_types WHERE id = ?", type_id)[0]["status"] == "draft"
 
 
 def test_publish_refuses_an_invalid_saved_room(client):
     bad = dict(L_ROOM, ceiling=10)
     type_id = db.execute(
-        "INSERT INTO room_types (dorm_id, name, geometry) VALUES (?, 'Broken', ?)",
+        "INSERT INTO suite_types (dorm_id, name, geometry) VALUES (?, 'Broken', ?)",
         demo_hall_id(), json.dumps(bad),
     )
     admin_client(client).post(f"/admin/types/{type_id}/publish")
-    assert db.execute("SELECT status FROM room_types WHERE id = ?", type_id)[0]["status"] == "draft"
+    assert db.execute("SELECT status FROM suite_types WHERE id = ?", type_id)[0]["status"] == "draft"
     assert "Can&#39;t publish Broken yet" in client.get(f"/admin/types/{type_id}/edit").get_data(as_text=True)
 
 
-def test_room_types_list_has_edit_3d_and_publish_buttons(client):
+def test_suite_types_list_has_edit_3d_and_publish_buttons(client):
     page = admin_client(client).get("/admin/types").get_data(as_text=True)
-    single = db.execute("SELECT id FROM room_types WHERE name = 'Single (sample)'")[0]["id"]
+    single = db.execute("SELECT id FROM suite_types WHERE name = 'Single (sample)'")[0]["id"]
     assert f'href="/admin/types/{single}/edit"' in page
     assert f'href="/plan/{single}"' in page
     assert f'action="/admin/types/{single}/unpublish"' in page
@@ -310,11 +310,11 @@ def test_room_types_list_has_edit_3d_and_publish_buttons(client):
 def test_duplicate_name_is_reported_with_other_problems(client):
     response = admin_client(client).post("/admin/types/new", data=builder_form(name="Single (sample)", capacity="9"))
     page = response.get_data(as_text=True)
-    assert "Capacity must be" in page and "already has a room type called Single (sample)" in page
+    assert "Capacity must be" in page and "already has a suite type called Single (sample)" in page
 
 
 def test_editing_keeps_its_own_name(client):
-    single = db.execute("SELECT id FROM room_types WHERE name = 'Single (sample)'")[0]["id"]
+    single = db.execute("SELECT id FROM suite_types WHERE name = 'Single (sample)'")[0]["id"]
     response = admin_client(client).post(f"/admin/types/{single}/edit", data=builder_form(name="Single (sample)"))
     assert response.status_code == 302
 
@@ -322,7 +322,7 @@ def test_editing_keeps_its_own_name(client):
 # --- A5: rooms and assignments -------------------------------------------------
 
 def type_id_named(name):
-    return db.execute("SELECT id FROM room_types WHERE name = ?", name)[0]["id"]
+    return db.execute("SELECT id FROM suite_types WHERE name = ?", name)[0]["id"]
 
 
 def add_student(email):
@@ -331,101 +331,101 @@ def add_student(email):
 
 def make_room(number="B-21", type_name="Double (sample)"):
     """Insert a room directly and return its id."""
-    room_type = db.execute("SELECT id, dorm_id FROM room_types WHERE name = ?", type_name)[0]
+    suite_type = db.execute("SELECT id, dorm_id FROM suite_types WHERE name = ?", type_name)[0]
     return db.execute(
-        "INSERT INTO rooms (dorm_id, number, room_type_id) VALUES (?, ?, ?)",
-        room_type["dorm_id"], number, room_type["id"],
+        "INSERT INTO suites (dorm_id, number, suite_type_id) VALUES (?, ?, ?)",
+        suite_type["dorm_id"], number, suite_type["id"],
     )
 
 
 def test_add_room(client):
-    response = admin_client(client).post("/admin/rooms", data={"number": " B-21 ", "room_type_id": type_id_named("Double (sample)")})
+    response = admin_client(client).post("/admin/suites", data={"number": " B-21 ", "suite_type_id": type_id_named("Double (sample)")})
     assert response.status_code == 302
-    room = db.execute("SELECT * FROM rooms")[0]
+    room = db.execute("SELECT * FROM suites")[0]
     assert room["number"] == "B-21"
-    assert room["dorm_id"] == demo_hall_id()               # taken from the room type
-    page = client.get("/admin/rooms").get_data(as_text=True)
-    assert "Added room B-21." in page and "Demo Hall B-21" in page and "0 of 2" in page
+    assert room["dorm_id"] == demo_hall_id()               # taken from the suite type
+    page = client.get("/admin/suites").get_data(as_text=True)
+    assert "Added suite B-21." in page and "Demo Hall B-21" in page and "0 of 2" in page
 
 
 @pytest.mark.parametrize("data, message", [
-    ({"number": "", "room_type_id": "1"}, "number of 1 to 20"),
-    ({"number": "x" * 21, "room_type_id": "1"}, "number of 1 to 20"),
-    ({"number": "A-1", "room_type_id": "999"}, "Pick a room type"),
-    ({"number": "A-1", "room_type_id": "abc"}, "Pick a room type"),
+    ({"number": "", "suite_type_id": "1"}, "number of 1 to 20"),
+    ({"number": "x" * 21, "suite_type_id": "1"}, "number of 1 to 20"),
+    ({"number": "A-1", "suite_type_id": "999"}, "Pick a suite type"),
+    ({"number": "A-1", "suite_type_id": "abc"}, "Pick a suite type"),
 ])
 def test_add_room_validates(client, data, message):
-    admin_client(client).post("/admin/rooms", data=data)
-    assert message in client.get("/admin/rooms").get_data(as_text=True)
-    assert db.execute("SELECT COUNT(*) AS n FROM rooms")[0]["n"] == 0
+    admin_client(client).post("/admin/suites", data=data)
+    assert message in client.get("/admin/suites").get_data(as_text=True)
+    assert db.execute("SELECT COUNT(*) AS n FROM suites")[0]["n"] == 0
 
 
 def test_room_numbers_are_unique_per_dorm(client):
     make_room("B-21")
-    admin_client(client).post("/admin/rooms", data={"number": "B-21", "room_type_id": type_id_named("Single (sample)")})
-    assert "already has a room B-21" in client.get("/admin/rooms").get_data(as_text=True)
+    admin_client(client).post("/admin/suites", data={"number": "B-21", "suite_type_id": type_id_named("Single (sample)")})
+    assert "already has a suite B-21" in client.get("/admin/suites").get_data(as_text=True)
 
 
-def test_assigned_student_sees_my_room(client):
-    room_id = make_room("B-21", "Single (sample)")
+def test_assigned_student_sees_my_suite(client):
+    suite_id = make_room("B-21", "Single (sample)")
     student_id = add_student("frosh@example.com")
-    admin_client(client).post(f"/admin/rooms/{room_id}/assign", data={"email": " Frosh@Example.com "})
-    assert db.execute("SELECT room_id FROM assignments WHERE user_id = ?", student_id)[0]["room_id"] == room_id
-    assert "Assigned frosh@example.com to Demo Hall B-21." in client.get("/admin/rooms").get_data(as_text=True)
+    admin_client(client).post(f"/admin/suites/{suite_id}/assign", data={"email": " Frosh@Example.com "})
+    assert db.execute("SELECT suite_id FROM assignments WHERE user_id = ?", student_id)[0]["suite_id"] == suite_id
+    assert "Assigned frosh@example.com to Demo Hall B-21." in client.get("/admin/suites").get_data(as_text=True)
 
-    # The A5 "done when": the student now has My room, and it opens their planner.
+    # The A5 "done when": the student now has My suite, and it opens their planner.
     with client.session_transaction() as session:
         session["user_id"] = student_id
-    assert "My room" in client.get("/").get_data(as_text=True)
-    response = client.get("/my-room")
+    assert "My suite" in client.get("/").get_data(as_text=True)
+    response = client.get("/my-suite")
     assert response.headers["Location"] == f"/plan/{type_id_named('Single (sample)')}"
 
 
 def test_assign_unknown_email(client):
-    room_id = make_room()
-    admin_client(client).post(f"/admin/rooms/{room_id}/assign", data={"email": "nobody@example.com"})
-    assert "Ask the student to register first" in client.get("/admin/rooms").get_data(as_text=True)
+    suite_id = make_room()
+    admin_client(client).post(f"/admin/suites/{suite_id}/assign", data={"email": "nobody@example.com"})
+    assert "Ask the student to register first" in client.get("/admin/suites").get_data(as_text=True)
     assert db.execute("SELECT COUNT(*) AS n FROM assignments")[0]["n"] == 0
 
 
 def test_assigning_again_moves_the_student(client):
     first, second = make_room("B-21"), make_room("B-22")
     student_id = add_student("frosh@example.com")
-    admin_client(client).post(f"/admin/rooms/{first}/assign", data={"email": "frosh@example.com"})
-    client.post(f"/admin/rooms/{second}/assign", data={"email": "frosh@example.com"})
-    assert db.execute("SELECT room_id FROM assignments WHERE user_id = ?", student_id) == [{"room_id": second}]
-    assert "(moved from Demo Hall B-21)" in client.get("/admin/rooms").get_data(as_text=True)
+    admin_client(client).post(f"/admin/suites/{first}/assign", data={"email": "frosh@example.com"})
+    client.post(f"/admin/suites/{second}/assign", data={"email": "frosh@example.com"})
+    assert db.execute("SELECT suite_id FROM assignments WHERE user_id = ?", student_id) == [{"suite_id": second}]
+    assert "(moved from Demo Hall B-21)" in client.get("/admin/suites").get_data(as_text=True)
 
 
 def test_a_full_room_refuses_another_student(client):
-    room_id = make_room("B-21", "Double (sample)")          # capacity 2
+    suite_id = make_room("B-21", "Double (sample)")          # capacity 2
     for email in ("a@example.org", "b@example.org", "c@example.org"):
         add_student(email)
     admin_client(client)
     for email in ("a@example.org", "b@example.org", "c@example.org"):
-        client.post(f"/admin/rooms/{room_id}/assign", data={"email": email})
+        client.post(f"/admin/suites/{suite_id}/assign", data={"email": email})
     assert db.execute("SELECT COUNT(*) AS n FROM assignments")[0]["n"] == 2
-    page = client.get("/admin/rooms").get_data(as_text=True)
+    page = client.get("/admin/suites").get_data(as_text=True)
     assert "Demo Hall B-21 is full (capacity 2)" in page
 
 
 def test_unassign(client):
-    room_id = make_room()
+    suite_id = make_room()
     student_id = add_student("frosh@example.com")
-    db.execute("INSERT INTO assignments (user_id, room_id) VALUES (?, ?)", student_id, room_id)
-    admin_client(client).post(f"/admin/rooms/{room_id}/unassign", data={"user_id": student_id})
+    db.execute("INSERT INTO assignments (user_id, suite_id) VALUES (?, ?)", student_id, suite_id)
+    admin_client(client).post(f"/admin/suites/{suite_id}/unassign", data={"user_id": student_id})
     assert db.execute("SELECT COUNT(*) AS n FROM assignments")[0]["n"] == 0
-    assert "Unassigned from Demo Hall B-21." in client.get("/admin/rooms").get_data(as_text=True)
+    assert "Unassigned from Demo Hall B-21." in client.get("/admin/suites").get_data(as_text=True)
 
 
 def test_unassign_someone_not_in_the_room(client):
-    room_id = make_room()
-    admin_client(client).post(f"/admin/rooms/{room_id}/unassign", data={"user_id": "999"})
-    assert "isn&#39;t assigned to this room" in client.get("/admin/rooms").get_data(as_text=True)
+    suite_id = make_room()
+    admin_client(client).post(f"/admin/suites/{suite_id}/unassign", data={"user_id": "999"})
+    assert "isn&#39;t assigned to this suite" in client.get("/admin/suites").get_data(as_text=True)
 
 
 def test_assign_to_missing_room_is_404(client):
-    assert admin_client(client).post("/admin/rooms/999/assign", data={"email": "x@example.com"}).status_code == 404
+    assert admin_client(client).post("/admin/suites/999/assign", data={"email": "x@example.com"}).status_code == 404
 
 
 # --- A6: default layout --------------------------------------------------------
@@ -433,7 +433,7 @@ def test_assign_to_missing_room_is_404(client):
 def default_placements(type_id):
     return db.execute(
         "SELECT furniture_id, x, y, rotation FROM placements JOIN layouts ON layouts.id = placements.layout_id "
-        "WHERE layouts.room_type_id = ? AND layouts.user_id IS NULL ORDER BY placements.id",
+        "WHERE layouts.suite_type_id = ? AND layouts.user_id IS NULL ORDER BY placements.id",
         type_id,
     )
 
@@ -464,12 +464,12 @@ def test_save_default_layout_is_what_visitors_see(client):
 
 def test_default_layout_is_created_if_missing_and_stays_unique(client):
     single = type_id_named("Single (sample)")
-    db.execute("DELETE FROM layouts WHERE room_type_id = ? AND user_id IS NULL", single)
+    db.execute("DELETE FROM layouts WHERE suite_type_id = ? AND user_id IS NULL", single)
     admin_client(client)
     for x in (30, 40):
         client.put(f"/admin/api/types/{single}/default-layout",
                    json={"placements": [{"furniture_id": 1, "x": x, "y": 50, "rotation": 0}]})
-    rows = db.execute("SELECT id FROM layouts WHERE room_type_id = ? AND user_id IS NULL AND is_default = 1", single)
+    rows = db.execute("SELECT id FROM layouts WHERE suite_type_id = ? AND user_id IS NULL AND is_default = 1", single)
     assert len(rows) == 1
     assert [p["x"] for p in default_placements(single)] == [40]
 

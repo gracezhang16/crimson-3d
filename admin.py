@@ -22,7 +22,7 @@ MAX_DORM_NAME = 60
 MAX_YARD = 60
 MAX_DESCRIPTION = 500
 
-# Room type fields (SPEC.md 5 and 9.1). Lengths are ours; the spec gives none.
+# Suite type fields (SPEC.md 5 and 9.1). Lengths are ours; the spec gives none.
 ROOM_TYPE_FIELDS = ("dorm_id", "name", "capacity", "bathroom", "measured_by", "measured_on", "notes")
 BATHROOMS = ("en-suite", "hallway", "shared-suite")
 MAX_TYPE_NAME = 60
@@ -44,10 +44,10 @@ def index():
     The route is "" rather than "/" so the page is at /admin, not /admin/.
     """
     counts = {
-        "published": count("SELECT COUNT(*) AS n FROM room_types WHERE status = 'published'"),
-        "drafts": count("SELECT COUNT(*) AS n FROM room_types WHERE status = 'draft'"),
+        "published": count("SELECT COUNT(*) AS n FROM suite_types WHERE status = 'published'"),
+        "drafts": count("SELECT COUNT(*) AS n FROM suite_types WHERE status = 'draft'"),
         "dorms": count("SELECT COUNT(*) AS n FROM dorms"),
-        "rooms": count("SELECT COUNT(*) AS n FROM rooms"),
+        "suites": count("SELECT COUNT(*) AS n FROM suites"),
         "students": count("SELECT COUNT(*) AS n FROM users WHERE role = 'student'"),
         "assigned": count("SELECT COUNT(*) AS n FROM assignments"),
         "furniture": count("SELECT COUNT(*) AS n FROM furniture"),
@@ -57,24 +57,24 @@ def index():
 
 @admin.route("/types")
 @admin_required
-def room_types():
-    """List every room type, drafts included, grouped by dorm."""
+def suite_types():
+    """List every suite type, drafts included, grouped by dorm."""
     types = db.execute(
-        "SELECT room_types.id, room_types.name, room_types.status, room_types.capacity, "
-        "room_types.updated, dorms.name AS dorm_name, "
-        "(SELECT COUNT(*) FROM rooms WHERE rooms.room_type_id = room_types.id) AS room_count "
-        "FROM room_types JOIN dorms ON dorms.id = room_types.dorm_id "
-        "ORDER BY dorms.name, room_types.name"
+        "SELECT suite_types.id, suite_types.name, suite_types.status, suite_types.capacity, "
+        "suite_types.updated, dorms.name AS dorm_name, "
+        "(SELECT COUNT(*) FROM suites WHERE suites.suite_type_id = suite_types.id) AS room_count "
+        "FROM suite_types JOIN dorms ON dorms.id = suite_types.dorm_id "
+        "ORDER BY dorms.name, suite_types.name"
     )
-    return render_template("admin/room_types.html", types=types)
+    return render_template("admin/suite_types.html", types=types)
 
 
 # ---------------------------------------------------------------------------
 # Room builder: new, edit, publish (SPEC.md 7.3, 9.1)
 # ---------------------------------------------------------------------------
 
-def read_room_type_form(form, type_id=None):
-    """Read and check the builder form. `type_id` is the room type being
+def read_suite_type_form(form, type_id=None):
+    """Read and check the builder form. `type_id` is the suite type being
     edited (so its own name doesn't count as a duplicate), or None.
 
     Returns (values, geometry_text, geometry, errors): the trimmed text
@@ -92,9 +92,9 @@ def read_room_type_form(form, type_id=None):
     ):
         errors.append("Pick a dorm.")
     if not 1 <= len(values["name"]) <= MAX_TYPE_NAME:
-        errors.append(f"Give the room type a name of 1 to {MAX_TYPE_NAME} characters.")
+        errors.append(f"Give the suite type a name of 1 to {MAX_TYPE_NAME} characters.")
     elif not errors and db.execute(
-        "SELECT id FROM room_types WHERE dorm_id = ? AND name = ? AND id != ?",
+        "SELECT id FROM suite_types WHERE dorm_id = ? AND name = ? AND id != ?",
         int(values["dorm_id"]), values["name"], type_id or 0,
     ):
         # Checked here so every problem shows at once; the UNIQUE constraint
@@ -133,7 +133,7 @@ def is_iso_date(text):
     return True
 
 
-def room_type_params(values, geometry):
+def suite_type_params(values, geometry):
     """The column values to store, in ROOM_TYPE_FIELDS order plus geometry."""
     return (
         int(values["dorm_id"]), values["name"], int(values["capacity"]),
@@ -146,28 +146,28 @@ def room_type_params(values, geometry):
 def duplicate_name_error(values):
     """The message for a name already used in that dorm (UNIQUE (dorm_id, name))."""
     dorm = db.execute("SELECT name FROM dorms WHERE id = ?", int(values["dorm_id"]))[0]["name"]
-    return f"{dorm} already has a room type called {values['name']}."
+    return f"{dorm} already has a suite type called {values['name']}."
 
 
-def render_builder(room_type, values, geometry_text, errors=(), status=200):
+def render_builder(suite_type, values, geometry_text, errors=(), status=200):
     """Show the builder form, empty, filled from the database, or re-filled after errors."""
     dorms = db.execute("SELECT id, name FROM dorms ORDER BY name")
     return render_template(
-        "admin/room_type_form.html", dorms=dorms, room_type=room_type,
+        "admin/suite_type_form.html", dorms=dorms, suite_type=suite_type,
         values=values, geometry_text=geometry_text, errors=errors,
     ), status
 
 
-def find_room_type(type_id):
-    """Return the room_types row with this id, or None."""
-    rows = db.execute("SELECT * FROM room_types WHERE id = ?", type_id)
+def find_suite_type(type_id):
+    """Return the suite_types row with this id, or None."""
+    rows = db.execute("SELECT * FROM suite_types WHERE id = ?", type_id)
     return rows[0] if rows else None
 
 
 @admin.route("/types/new", methods=["GET", "POST"])
 @admin_required
-def new_room_type():
-    """The empty builder form; on POST, save it as a new draft room type.
+def new_suite_type():
+    """The empty builder form; on POST, save it as a new draft suite type.
 
     builder/main.js draws the live preview and fills the hidden "geometry"
     field; the browser won't submit while the preview shows problems.
@@ -176,89 +176,89 @@ def new_room_type():
         values = dict.fromkeys(ROOM_TYPE_FIELDS, "") | {"capacity": "1"}
         return render_builder(None, values, "")
 
-    values, geometry_text, geometry, errors = read_room_type_form(request.form)
+    values, geometry_text, geometry, errors = read_suite_type_form(request.form)
     if not errors:
         try:
             type_id = db.execute(
-                "INSERT INTO room_types (dorm_id, name, capacity, bathroom, measured_by, "
+                "INSERT INTO suite_types (dorm_id, name, capacity, bathroom, measured_by, "
                 "measured_on, notes, geometry, status, created_by) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)",
-                *room_type_params(values, geometry), session["user_id"],
+                *suite_type_params(values, geometry), session["user_id"],
             )
         except ValueError:  # UNIQUE (dorm_id, name) failed
             errors.append(duplicate_name_error(values))
         else:
             flash("Saved draft. Use Preview in 3D to check it, then Publish.")
-            return redirect(url_for("admin.edit_room_type", type_id=type_id))
+            return redirect(url_for("admin.edit_suite_type", type_id=type_id))
     return render_builder(None, values, geometry_text, errors, 400)
 
 
 @admin.route("/types/<int:type_id>/edit", methods=["GET", "POST"])
 @admin_required
-def edit_room_type(type_id):
+def edit_suite_type(type_id):
     """The builder form filled in from the database; on POST, save the changes.
 
-    A published room type stays published, so saved changes go live at once
+    A published suite type stays published, so saved changes go live at once
     (the page warns about this).
     """
-    room_type = find_room_type(type_id)
-    if room_type is None:
-        return apology("We couldn't find that room type.", 404)
+    suite_type = find_suite_type(type_id)
+    if suite_type is None:
+        return apology("We couldn't find that suite type.", 404)
 
     if request.method == "GET":
-        values = {field: "" if room_type[field] is None else str(room_type[field])
+        values = {field: "" if suite_type[field] is None else str(suite_type[field])
                   for field in ROOM_TYPE_FIELDS}
-        return render_builder(room_type, values, room_type["geometry"])
+        return render_builder(suite_type, values, suite_type["geometry"])
 
-    values, geometry_text, geometry, errors = read_room_type_form(request.form, type_id)
+    values, geometry_text, geometry, errors = read_suite_type_form(request.form, type_id)
     if not errors:
         try:
             db.execute(
-                "UPDATE room_types SET dorm_id = ?, name = ?, capacity = ?, bathroom = ?, "
+                "UPDATE suite_types SET dorm_id = ?, name = ?, capacity = ?, bathroom = ?, "
                 "measured_by = ?, measured_on = ?, notes = ?, geometry = ?, "
                 "updated = CURRENT_TIMESTAMP WHERE id = ?",
-                *room_type_params(values, geometry), type_id,
+                *suite_type_params(values, geometry), type_id,
             )
         except ValueError:  # UNIQUE (dorm_id, name) failed
             errors.append(duplicate_name_error(values))
         else:
-            flash("Saved changes." + (" Students see them now." if room_type["status"] == "published" else ""))
-            return redirect(url_for("admin.edit_room_type", type_id=type_id))
-    return render_builder(room_type, values, geometry_text, errors, 400)
+            flash("Saved changes." + (" Students see them now." if suite_type["status"] == "published" else ""))
+            return redirect(url_for("admin.edit_suite_type", type_id=type_id))
+    return render_builder(suite_type, values, geometry_text, errors, 400)
 
 
 @admin.route("/types/<int:type_id>/publish", methods=["POST"])
 @admin_required
-def publish_room_type(type_id):
-    """Publish a room type, but only if its saved geometry is valid (SPEC.md 7.3)."""
-    room_type = find_room_type(type_id)
-    if room_type is None:
-        return apology("We couldn't find that room type.", 404)
-    errors = validate_room(json.loads(room_type["geometry"]))
+def publish_suite_type(type_id):
+    """Publish a suite type, but only if its saved geometry is valid (SPEC.md 7.3)."""
+    suite_type = find_suite_type(type_id)
+    if suite_type is None:
+        return apology("We couldn't find that suite type.", 404)
+    errors = validate_room(json.loads(suite_type["geometry"]))
     if errors:
-        flash(f"Can't publish {room_type['name']} yet: {errors[0]}")
+        flash(f"Can't publish {suite_type['name']} yet: {errors[0]}")
     else:
         db.execute(
-            "UPDATE room_types SET status = 'published', updated = CURRENT_TIMESTAMP WHERE id = ?",
+            "UPDATE suite_types SET status = 'published', updated = CURRENT_TIMESTAMP WHERE id = ?",
             type_id,
         )
-        flash(f"Published {room_type['name']}. Students can now find it.")
-    return redirect(url_for("admin.edit_room_type", type_id=type_id))
+        flash(f"Published {suite_type['name']}. Students can now find it.")
+    return redirect(url_for("admin.edit_suite_type", type_id=type_id))
 
 
 @admin.route("/types/<int:type_id>/unpublish", methods=["POST"])
 @admin_required
-def unpublish_room_type(type_id):
-    """Put a room type back to draft, hiding it (and its layouts) from students."""
-    room_type = find_room_type(type_id)
-    if room_type is None:
-        return apology("We couldn't find that room type.", 404)
+def unpublish_suite_type(type_id):
+    """Put a suite type back to draft, hiding it (and its layouts) from students."""
+    suite_type = find_suite_type(type_id)
+    if suite_type is None:
+        return apology("We couldn't find that suite type.", 404)
     db.execute(
-        "UPDATE room_types SET status = 'draft', updated = CURRENT_TIMESTAMP WHERE id = ?",
+        "UPDATE suite_types SET status = 'draft', updated = CURRENT_TIMESTAMP WHERE id = ?",
         type_id,
     )
-    flash(f"{room_type['name']} is a draft again. Only admins can see it.")
-    return redirect(url_for("admin.edit_room_type", type_id=type_id))
+    flash(f"{suite_type['name']} is a draft again. Only admins can see it.")
+    return redirect(url_for("admin.edit_suite_type", type_id=type_id))
 
 
 @admin.route("/dorms", methods=["GET", "POST"])
@@ -289,8 +289,8 @@ def dorms():
                 return redirect(url_for("admin.dorms"))
 
     rows = db.execute(
-        "SELECT dorms.id, dorms.name, dorms.yard, COUNT(room_types.id) AS type_count "
-        "FROM dorms LEFT JOIN room_types ON room_types.dorm_id = dorms.id "
+        "SELECT dorms.id, dorms.name, dorms.yard, COUNT(suite_types.id) AS type_count "
+        "FROM dorms LEFT JOIN suite_types ON suite_types.dorm_id = dorms.id "
         "GROUP BY dorms.id ORDER BY dorms.name"
     )
     status = 400 if error else 200
@@ -321,40 +321,40 @@ def default_layout(type_id):
     The planner loads the current default from /api/types/<id> as usual.
     """
     rows = db.execute(
-        "SELECT room_types.id, room_types.name, room_types.status, "
+        "SELECT suite_types.id, suite_types.name, suite_types.status, "
         "dorms.id AS dorm_id, dorms.name AS dorm_name "
-        "FROM room_types JOIN dorms ON dorms.id = room_types.dorm_id WHERE room_types.id = ?",
+        "FROM suite_types JOIN dorms ON dorms.id = suite_types.dorm_id WHERE suite_types.id = ?",
         type_id,
     )
     if not rows:
-        return apology("We couldn't find that room type.", 404)
-    return render_template("plan.html", room_type=rows[0], layout_id="", mode="admin-default")
+        return apology("We couldn't find that suite type.", 404)
+    return render_template("plan.html", suite_type=rows[0], layout_id="", mode="admin-default")
 
 
 @admin.route("/api/types/<int:type_id>/default-layout", methods=["PUT"])
 @admin_required
 def save_default_layout(type_id):
-    """Replace a room type's default layout: {placements} -> {ok, updated}.
+    """Replace a suite type's default layout: {placements} -> {ok, updated}.
 
     The default layout is the layouts row with no owner and is_default = 1
     (SPEC.md 5). It is created if the room has none, so there is always at
-    most one per room type. Placements are checked with
+    most one per suite type. Placements are checked with
     geometry.validate_placements, as for students' layouts.
     """
-    room_type = find_room_type(type_id)
-    if room_type is None:
-        return json_error("We couldn't find that room type.", 404)
+    suite_type = find_suite_type(type_id)
+    if suite_type is None:
+        return json_error("We couldn't find that suite type.", 404)
     body = request.get_json(silent=True) if request.is_json else None
     if not isinstance(body, dict) or "placements" not in body:
         return json_error("Send {\"placements\": [...]} as JSON.", 400)
     placements = body["placements"]
-    error = placements_error(placements, json.loads(room_type["geometry"]))
+    error = placements_error(placements, json.loads(suite_type["geometry"]))
     if error:
         return json_error(error, 400)
 
     def save():
         rows = db.execute(
-            "SELECT id FROM layouts WHERE room_type_id = ? AND user_id IS NULL AND is_default = 1",
+            "SELECT id FROM layouts WHERE suite_type_id = ? AND user_id IS NULL AND is_default = 1",
             type_id,
         )
         if rows:
@@ -363,7 +363,7 @@ def save_default_layout(type_id):
             db.execute("DELETE FROM placements WHERE layout_id = ?", layout_id)
         else:
             layout_id = db.execute(
-                "INSERT INTO layouts (user_id, room_type_id, name, is_default) "
+                "INSERT INTO layouts (user_id, suite_type_id, name, is_default) "
                 "VALUES (NULL, ?, 'Default layout', 1)",
                 type_id,
             )
@@ -379,130 +379,130 @@ def save_default_layout(type_id):
 # Rooms and assignments (SPEC.md 7.3, 9.3)
 # ---------------------------------------------------------------------------
 
-@admin.route("/rooms", methods=["GET", "POST"])
+@admin.route("/suites", methods=["GET", "POST"])
 @admin_required
-def rooms():
+def suites():
     """List rooms with their students; on POST, add a room.
 
-    A room is a thin record pointing at a room type (SPEC.md 1). Its dorm is
-    taken from the room type, so the two can never disagree.
+    A room is a thin record pointing at a suite type (SPEC.md 1). Its dorm is
+    taken from the suite type, so the two can never disagree.
     """
     if request.method == "POST":
-        add_room(request.form)
-        return redirect(url_for("admin.rooms"))
+        add_suite(request.form)
+        return redirect(url_for("admin.suites"))
 
     room_rows = db.execute(
-        "SELECT rooms.id, rooms.number, dorms.name AS dorm_name, "
-        "room_types.id AS type_id, room_types.name AS type_name, room_types.capacity "
-        "FROM rooms JOIN dorms ON dorms.id = rooms.dorm_id "
-        "JOIN room_types ON room_types.id = rooms.room_type_id "
-        "ORDER BY dorms.name, rooms.number"
+        "SELECT suites.id, suites.number, dorms.name AS dorm_name, "
+        "suite_types.id AS type_id, suite_types.name AS type_name, suite_types.capacity "
+        "FROM suites JOIN dorms ON dorms.id = suites.dorm_id "
+        "JOIN suite_types ON suite_types.id = suites.suite_type_id "
+        "ORDER BY dorms.name, suites.number"
     )
     students = db.execute(
-        "SELECT assignments.room_id, users.id, users.email FROM assignments "
+        "SELECT assignments.suite_id, users.id, users.email FROM assignments "
         "JOIN users ON users.id = assignments.user_id ORDER BY users.email"
     )
     for room in room_rows:
-        room["students"] = [s for s in students if s["room_id"] == room["id"]]
+        room["students"] = [s for s in students if s["suite_id"] == room["id"]]
     types = db.execute(
-        "SELECT room_types.id, room_types.name, room_types.status, dorms.name AS dorm_name "
-        "FROM room_types JOIN dorms ON dorms.id = room_types.dorm_id "
-        "ORDER BY dorms.name, room_types.name"
+        "SELECT suite_types.id, suite_types.name, suite_types.status, dorms.name AS dorm_name "
+        "FROM suite_types JOIN dorms ON dorms.id = suite_types.dorm_id "
+        "ORDER BY dorms.name, suite_types.name"
     )
-    return render_template("admin/rooms.html", rooms=room_rows, types=types)
+    return render_template("admin/suites.html", suites=room_rows, types=types)
 
 
-def add_room(form):
+def add_suite(form):
     """Add a room from the form, flashing what happened."""
     number = (form.get("number") or "").strip()
-    type_id = form.get("room_type_id") or ""
-    types = db.execute("SELECT id, dorm_id FROM room_types WHERE id = ?", int(type_id)) if type_id.isdigit() else []
+    type_id = form.get("suite_type_id") or ""
+    types = db.execute("SELECT id, dorm_id FROM suite_types WHERE id = ?", int(type_id)) if type_id.isdigit() else []
     if not 1 <= len(number) <= MAX_ROOM_NUMBER:
-        flash(f"Give the room a number of 1 to {MAX_ROOM_NUMBER} characters, like B-21.")
+        flash(f"Give the suite a number of 1 to {MAX_ROOM_NUMBER} characters, like B-21.")
     elif not types:
-        flash("Pick a room type for the room.")
+        flash("Pick a suite type for the suite.")
     else:
         try:
             db.execute(
-                "INSERT INTO rooms (dorm_id, number, room_type_id) VALUES (?, ?, ?)",
+                "INSERT INTO suites (dorm_id, number, suite_type_id) VALUES (?, ?, ?)",
                 types[0]["dorm_id"], number, types[0]["id"],
             )
         except ValueError:  # UNIQUE (dorm_id, number)
-            flash(f"That dorm already has a room {number}.")
+            flash(f"That dorm already has a suite {number}.")
         else:
-            flash(f"Added room {number}.")
+            flash(f"Added suite {number}.")
 
 
-def find_room(room_id):
+def find_suite(suite_id):
     """Return the room with its dorm name and capacity, or None."""
     rows = db.execute(
-        "SELECT rooms.id, rooms.number, dorms.name AS dorm_name, room_types.capacity "
-        "FROM rooms JOIN dorms ON dorms.id = rooms.dorm_id "
-        "JOIN room_types ON room_types.id = rooms.room_type_id WHERE rooms.id = ?",
-        room_id,
+        "SELECT suites.id, suites.number, dorms.name AS dorm_name, suite_types.capacity "
+        "FROM suites JOIN dorms ON dorms.id = suites.dorm_id "
+        "JOIN suite_types ON suite_types.id = suites.suite_type_id WHERE suites.id = ?",
+        suite_id,
     )
     return rows[0] if rows else None
 
 
-@admin.route("/rooms/<int:room_id>/assign", methods=["POST"])
+@admin.route("/suites/<int:suite_id>/assign", methods=["POST"])
 @admin_required
-def assign_room(room_id):
+def assign_suite(suite_id):
     """Link a registered student (form field `email`) to this room.
 
     A student has at most one room (assignments.user_id is the primary key),
     so assigning someone who already has a room moves them. A room holds at
-    most its room type's capacity.
+    most its suite type's capacity.
     """
-    room = find_room(room_id)
+    room = find_suite(suite_id)
     if room is None:
-        return apology("We couldn't find that room.", 404)
+        return apology("We couldn't find that suite.", 404)
     email = normalize_email(request.form.get("email"))
     users = db.execute("SELECT id FROM users WHERE email = ?", email)
     label = f"{room['dorm_name']} {room['number']}"
 
     if not users:
         flash(f"No account with the email {email or '(blank)'}. Ask the student to register first.")
-        return redirect(url_for("admin.rooms"))
+        return redirect(url_for("admin.suites"))
     user_id = users[0]["id"]
     current = db.execute(
-        "SELECT rooms.id, rooms.number, dorms.name AS dorm_name FROM assignments "
-        "JOIN rooms ON rooms.id = assignments.room_id JOIN dorms ON dorms.id = rooms.dorm_id "
+        "SELECT suites.id, suites.number, dorms.name AS dorm_name FROM assignments "
+        "JOIN suites ON suites.id = assignments.suite_id JOIN dorms ON dorms.id = suites.dorm_id "
         "WHERE assignments.user_id = ?",
         user_id,
     )
-    if current and current[0]["id"] == room_id:
+    if current and current[0]["id"] == suite_id:
         flash(f"{email} is already assigned to {label}.")
-        return redirect(url_for("admin.rooms"))
-    occupants = db.execute("SELECT COUNT(*) AS n FROM assignments WHERE room_id = ?", room_id)[0]["n"]
+        return redirect(url_for("admin.suites"))
+    occupants = db.execute("SELECT COUNT(*) AS n FROM assignments WHERE suite_id = ?", suite_id)[0]["n"]
     if occupants >= room["capacity"]:
         flash(f"{label} is full (capacity {room['capacity']}). Unassign someone first.")
-        return redirect(url_for("admin.rooms"))
+        return redirect(url_for("admin.suites"))
 
     # INSERT OR REPLACE: if the student already has a row (a room), replace it.
-    db.execute("INSERT OR REPLACE INTO assignments (user_id, room_id) VALUES (?, ?)", user_id, room_id)
+    db.execute("INSERT OR REPLACE INTO assignments (user_id, suite_id) VALUES (?, ?)", user_id, suite_id)
     moved = f" (moved from {current[0]['dorm_name']} {current[0]['number']})" if current else ""
     flash(f"Assigned {email} to {label}{moved}.")
-    return redirect(url_for("admin.rooms"))
+    return redirect(url_for("admin.suites"))
 
 
-@admin.route("/rooms/<int:room_id>/unassign", methods=["POST"])
+@admin.route("/suites/<int:suite_id>/unassign", methods=["POST"])
 @admin_required
-def unassign_room(room_id):
+def unassign_suite(suite_id):
     """Remove one student (form field `user_id`) from this room.
 
     SPEC.md 7.3 lists no field here; a double can have two students, so the
     form says which one.
     """
-    room = find_room(room_id)
+    room = find_suite(suite_id)
     if room is None:
-        return apology("We couldn't find that room.", 404)
+        return apology("We couldn't find that suite.", 404)
     user_id = request.form.get("user_id") or ""
     removed = db.execute(
-        "DELETE FROM assignments WHERE room_id = ? AND user_id = ?",
-        room_id, int(user_id) if user_id.isdigit() else -1,
+        "DELETE FROM assignments WHERE suite_id = ? AND user_id = ?",
+        suite_id, int(user_id) if user_id.isdigit() else -1,
     )
     if removed:
         flash(f"Unassigned from {room['dorm_name']} {room['number']}.")
     else:
-        flash("That student isn't assigned to this room.")
-    return redirect(url_for("admin.rooms"))
+        flash("That student isn't assigned to this suite.")
+    return redirect(url_for("admin.suites"))

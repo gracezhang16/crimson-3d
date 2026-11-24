@@ -19,8 +19,8 @@ def seed_room(filename):
 
 
 def type_id(name):
-    """Return the id of the seeded room type with this name."""
-    return db.execute("SELECT id FROM room_types WHERE name = ?", name)[0]["id"]
+    """Return the id of the seeded suite type with this name."""
+    return db.execute("SELECT id FROM suite_types WHERE name = ?", name)[0]["id"]
 
 
 def log_in(client, role="student", email=None):
@@ -37,7 +37,7 @@ def log_in(client, role="student", email=None):
 def make_draft():
     """Turn the sample single into a draft and return its id."""
     draft_id = type_id("Single (sample)")
-    db.execute("UPDATE room_types SET status = 'draft' WHERE id = ?", draft_id)
+    db.execute("UPDATE suite_types SET status = 'draft' WHERE id = ?", draft_id)
     return draft_id
 
 
@@ -77,7 +77,7 @@ def test_type_default_layout_matches_the_seed(client):
 
 def test_type_without_default_layout_has_no_placements(client):
     single = type_id("Single (sample)")
-    db.execute("DELETE FROM layouts WHERE room_type_id = ?", single)
+    db.execute("DELETE FROM layouts WHERE suite_type_id = ?", single)
     data = client.get(f"/api/types/{single}").get_json()
     assert data["default_layout"] == {"placements": []}
 
@@ -264,7 +264,7 @@ def test_create_checks_type_id(client, bad_type_id, status):
 
 
 def test_create_rejects_draft_room_for_student(client, single):
-    db.execute("UPDATE room_types SET status = 'draft' WHERE id = ?", single)
+    db.execute("UPDATE suite_types SET status = 'draft' WHERE id = ?", single)
     log_in(client)
     assert create(client, single).status_code == 404
 
@@ -322,7 +322,7 @@ def test_at_most_20_layouts_per_room(client, single):
     response = create(client, single, name="One too many")
     assert response.status_code == 400
     assert "at most 20" in response.get_json()["error"]
-    # The limit is per room type: another room still works.
+    # The limit is per suite type: another room still works.
     assert create(client, type_id("Double (sample)")).status_code == 201
 
 
@@ -364,7 +364,7 @@ def test_other_users_layout_is_403(client, single):
 
 def test_default_layout_is_403_even_for_admin(client, single):
     default_id = db.execute(
-        "SELECT id FROM layouts WHERE room_type_id = ? AND user_id IS NULL", single
+        "SELECT id FROM layouts WHERE suite_type_id = ? AND user_id IS NULL", single
     )[0]["id"]
     log_in(client, "admin")
     assert client.get(f"/api/layouts/{default_id}").status_code == 403
@@ -380,10 +380,10 @@ def test_missing_layout_is_404(client):
 def test_layout_of_unpublished_room_is_404(client, single):
     log_in(client)
     layout_id = create(client, single).get_json()["id"]
-    db.execute("UPDATE room_types SET status = 'draft' WHERE id = ?", single)
+    db.execute("UPDATE suite_types SET status = 'draft' WHERE id = ?", single)
     assert client.get(f"/api/layouts/{layout_id}").status_code == 404
     # Still stored: publishing again brings it back.
-    db.execute("UPDATE room_types SET status = 'published' WHERE id = ?", single)
+    db.execute("UPDATE suite_types SET status = 'published' WHERE id = ?", single)
     assert client.get(f"/api/layouts/{layout_id}").status_code == 200
 
 
