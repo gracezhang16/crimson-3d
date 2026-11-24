@@ -1,0 +1,49 @@
+{% extends "layout.html" %}
+
+{# The 3D planner page (Claire). SPEC.md 8.1: data reaches the JavaScript only
+   through the data-* attributes on #planner, never as inline <script> data.
+   main.js reads them with element.dataset (data-type-id -> dataset.typeId). #}
+
+{% block title %}{{ room_type.name }} · Planner{% endblock %}
+
+{% block head %}
+    <link href="{{ url_for('static', filename='css/planner.css') }}" rel="stylesheet">
+{% endblock %}
+
+{# Full width, no padding: the planner fills the space between navbar and footer. #}
+{% block main_class %}d-flex{% endblock %}
+
+{% block main %}
+    <div id="planner" class="planner"
+         data-type-id="{{ room_type.id }}"
+         data-layout-id="{{ layout_id }}"
+         data-mode="{{ mode }}"
+         data-logged-in="{{ 'true' if user else 'false' }}">
+
+        <aside class="planner-panel">
+            <section>
+                <h1 class="h5 mb-0">{{ room_type.name }}</h1>
+                <a class="small" href="{{ url_for('pages.room_type', type_id=room_type.id) }}">{{ room_type.dorm_name }} · room facts</a>
+                {% if room_type.status == "draft" %}
+                    <span class="badge text-bg-warning align-self-start">Draft</span>
+                {% endif %}
+            </section>
+            <section>
+                <h2 class="planner-heading">Moving around</h2>
+                <p class="small text-body-secondary mb-0">
+                    Drag to turn the room. Scroll or pinch to zoom.
+                    Right-drag or two-finger drag to slide the view.
+                </p>
+            </section>
+        </aside>
+
+        <div class="planner-scene">
+            {# main.js replaces this canvas with a message if WebGL is unavailable. #}
+            <canvas id="scene" aria-label="3D view of the room"></canvas>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+    <script type="module" src="{{ url_for('static', filename='js/planner/main.js') }}"></script>
+{% endblock %}

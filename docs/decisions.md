@@ -151,3 +151,37 @@ Technical choices:
 - **The preview draws features in the planner's colours**: door = brown stretch of wall plus its faint door zone, window = blue double line, closet = dashed 24 in box, radiator = grey box, outlet = dot. Features with problems aren't drawn. Positions come from `featureSpan()`, shared with the planner.
 - **Red arrows mark each wall's left corner** (SPEC.md 9.1 item 4). Outlines are clockwise, so that's simply each wall's start corner. The arrowhead is an SVG `<marker>` sized in inches (`markerUnits="userSpaceOnUse"`).
 - **The form column is now 7 of 12 Bootstrap columns (preview 5)** so the eight-column features table fits without hiding the dropdown text.
+## 2026-11-24 (P1, built for Claire with the team's agreement)
+
+- **`/plan/<id>` lives in `pages.py`** (SPEC.md 7.1 lists it there); the template, CSS and JavaScript are Claire's. Drafts 404 for non-admins, like the facts page. The "Open in 3D" links now use `url_for('pages.plan', ...)`.
+- **`layout.html` gained a `main_class` block** (default `container py-4`) so the planner can use the full window width. Other pages are unchanged; a test checks the home page still has the container.
+- **Planner layout follows `docs/demo-reference.html`**: a 318 px tool panel on the left and the room filling the rest. Below 768 px the room goes on top (60% of the screen height) with the panel underneath.
+- **WebGL check looks for WebGL 2 only**, because three.js 0.170 dropped WebGL 1. If creating the renderer still fails, the same SPEC.md 8.8 message is shown.
+- **Render on demand**: a frame is drawn only when OrbitControls fires `change` (including while damping glides to a stop) or another module calls `requestRender()`. The scene costs nothing while idle.
+- **Panning is allowed but clamped**: the orbit centre can slide over the floor's bounding box and no further; target and camera move back together so the view angle doesn't jump (SPEC.md 8.2: "disable panning beyond the room"). Panning moves along the floor (`screenSpacePanning = false`), never up through the ceiling.
+- **`fitCamera(box)` backs the camera off until the box's bounding sphere fits in the 35° field of view** (+10%), viewing from the south-east and above so the north wall is at the back. It also sets the zoom limits and near/far planes from the room's size.
+- **The camera stops 0.05 rad above the horizon** (`maxPolarAngle`), so it can't look up from under the floor.
+- **Checked in headless Chrome** (screenshots at 1280 px and phone width). Headless Chrome won't make its window narrower than about 500 px, so the exact phone fit still needs a real browser's device mode.
+
+## 2026-11-24 (P2, built for Claire with the team's agreement)
+
+- **P2 loads the room from `/api/types/<id>`, not the static seed file** SPEC.md 10 mentions. Flask doesn't serve `seed/`, and the API (S4) already existed. Furniture from the same response is used from P4.
+- **SPEC.md 8.3 wording, to fix:** it says a wall becomes a stub when "its inward normal points toward the camera". The wall that hides the room is the one with the camera on its *outer* side, i.e. its inward normal points *away* from the camera. We implemented the intended behaviour (`roomMath.cameraOutsideWall`, tested from four viewpoints including an L-shape). The team should correct the spec sentence; it wasn't edited here.
+- **Walls are extended by their thickness only at outer (convex) corners** (`roomMath.isConvexCorner`). Extending at the inner corner of an L-shape would push the wall box into the room.
+- **Walls are built 1 unit tall and stretched with `scale.y`**, with the box's origin at its bottom, so switching between full height and a 4 in stub is a single property change per frame.
+- **Floor grid is a 64 px canvas texture repeated every 12 in.** `ShapeGeometry` uses the shape's own coordinates (inches) as texture coordinates, so `repeat = 1/12` gives one grid square per foot with no extra maths.
+- **New pure module `static/js/planner/roomMath.js`** (no three.js or DOM) holds the corner and dollhouse maths, so `node --test` covers them. `rules.js` (P7) will follow the same pattern.
+- **New shared file `static/js/shared/units.js`** with `formatFeetInches`, used by the planner labels and (from A2) the builder preview. The identical file is added on both branches, so they merge cleanly. Its Python twin is the `feet_inches` filter.
+- **Wall labels go on the two full-height walls farthest from the camera**, as HTML positioned by projecting each wall's top centre each frame. They are hidden when the point is behind the camera, and the 3D area clips them (`overflow: hidden`).
+- **The camera now orbits the centre of the room's box (half the ceiling height), not the floor.** Aiming at the floor cut off the top of the walls; panning keeps that height.
+- **`scene.js` gained `addFrameCallback(fn)`** so modules can update things that depend on the camera (stubs, labels) right before each frame.
+
+## 2026-11-24 (P3, built for Claire with the team's agreement)
+
+- **Zones live in `rules.js` from P3** (`zones(geometry)`: corners plus bounding box plus issue text) even though the rest of `rules.js` is P7. P3 draws door zones, and P7 checks furniture against the same zones, so there is one definition. Each zone is a rectangle against the wall, as wide as the feature: door = width deep, closet = 24 in, radiator = its depth (default 6 in), per SPEC.md 4.3.
+- **Features are placed with `featureSpan()` from `shared/geometry.js`**, the same function the builder preview uses (A3), so "offset from the left corner as seen from inside" is computed in exactly one place.
+- **Each feature is built in its own space** (x along the wall, y up, z into the room), then turned with `rotation.y = atan2(nx, ny)` so its z axis follows the wall's inward normal. One placement function serves every kind of feature and every wall angle.
+- **Doors, windows, closets and outlets hide with their wall when it drops to a stub**; radiators and door zones stay because they're on the floor and affect furniture. Alternative: show features on stubs, which would leave doors floating in mid-air.
+- **Only door zones are tinted for now** (SPEC.md 4.3 asks for that one). Closet and radiator zones are computed and will matter in P7.
+- **No door-swing arcs**: the room format has no hinge side, so neither the planner nor the builder draws one. Adding a hinge would change SPEC.md 4 and needs all three teammates.
+- **Checked with a scratch "Feature test" room** (door, window, radiator and outlet on the north wall, closet on the west wall), because both sample rooms put their door on the south wall, which is a stub from the default view.
