@@ -1,0 +1,49 @@
+{% extends "layout.html" %}
+
+{% block title %}Admin{% endblock %}
+
+{% block main %}
+    <h1 class="h3 mb-4">Admin</h1>
+
+    {# One small card per number. row-cols-* sets how many fit per row at
+       each screen width (2 on phones, 4 on wide screens). #}
+    <div class="row row-cols-2 row-cols-md-4 g-3 mb-4">
+        {% for label, value in [
+            ("Published room types", counts.published),
+            ("Draft room types", counts.drafts),
+            ("Dorms", counts.dorms),
+            ("Rooms", counts.rooms),
+            ("Students", counts.students),
+            ("Students with a room", counts.assigned),
+            ("Furniture items", counts.furniture),
+        ] %}
+            <div class="col">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="fs-3 fw-semibold">{{ value }}</div>
+                        <div class="small text-body-secondary">{{ label }}</div>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+
+    <h2 class="h5">Manage</h2>
+    <div class="list-group narrow-card">
+        <a class="list-group-item list-group-item-action" href="{{ url_for('admin.room_types') }}">
+            Room types <span class="text-body-secondary small">· build, edit and publish rooms</span>
+        </a>
+        {# Pages still to be built, listed so the plan is visible. Each becomes a
+           link when its milestone lands (SPEC.md 10, admin track). #}
+        {% for name, milestone in [
+            ("New room type", "A2–A4"),
+            ("Rooms and student assignments", "A5"),
+            ("Dorms", "A7"),
+            ("Furniture catalog", "A7"),
+        ] %}
+            <span class="list-group-item text-body-secondary">
+                {{ name }} <span class="badge text-bg-light border">coming in {{ milestone }}</span>
+            </span>
+        {% endfor %}
+    </div>
+{% endblock %}

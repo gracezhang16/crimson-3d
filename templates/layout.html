@@ -40,6 +40,9 @@
                             <li class="nav-item"><a class="nav-link" href="{{ url_for('pages.my_room') }}">My room</a></li>
                         {% endif %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('pages.my_layouts') }}">My layouts</a></li>
+                        {% if user.role == "admin" %}
+                            <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.index') }}">Admin</a></li>
+                        {% endif %}
                     {% endif %}
                 </ul>
                 {# `user` comes from inject_user() in app.py. #}

@@ -108,3 +108,12 @@ Technical choices:
 - **"Last saved" is sent as UTC in `<time datetime="...Z">` and shown in the viewer's time zone by JavaScript** (`toLocaleString`). Without JavaScript the UTC date is shown. Alternative: format on the server, which can't know the viewer's time zone.
 - **layouts.js builds messages with `textContent`, never `innerHTML`**, so a layout named `<script>` is shown as text, not run.
 - **The rename form's flex layout sits on an inner `<div>`**: Bootstrap's `.d-flex` uses `display: flex !important`, which would override the `hidden` attribute on the form itself.
+
+## 2026-11-24 (A1, built for Hannah with the team's agreement)
+
+- **The admin guard test reads Flask's route table** (`app.url_map`) instead of listing URLs by hand, and tries every `/admin` route with every method as a visitor and as a student (both must get 403). A route added later without `@admin_required` fails the tests automatically; this was checked by temporarily removing the decorator from `/admin/types`. A separate test makes sure the route list isn't empty, so the guard tests can't pass by testing nothing.
+- **The admin home route is `""`, not `"/"`**, so the page is at `/admin` (SPEC.md 7.3) rather than `/admin/`.
+- **Admin home shows seven counts**: published and draft room types, dorms, rooms, students, students with a room, and furniture items. Pages from later milestones are listed greyed out with "coming in A…", so the plan is visible; each becomes a link when built.
+- **The room types list links to each type's facts page**, not straight to `/plan/<id>`, because the planner route is on the `planner` branch; keeping the `admin` branch independent avoids a merge-order dependency. The facts page has "Open in 3D". Edit and Publish buttons arrive in A4.
+- **"Last updated" on the room types list is labelled UTC** (it's SQLite's `CURRENT_TIMESTAMP`).
+- **Navbar "Admin" link for admins only** (`layout.html`, shared).

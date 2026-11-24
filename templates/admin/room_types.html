@@ -1,0 +1,58 @@
+{% extends "layout.html" %}
+
+{% block title %}Room types · Admin{% endblock %}
+
+{% block main %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}">Admin</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Room types</li>
+        </ol>
+    </nav>
+
+    <h1 class="h3 mb-3">Room types</h1>
+
+    {% if types %}
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th scope="col">Room type</th>
+                        <th scope="col">Dorm</th>
+                        <th scope="col">Status</th>
+                        <th scope="col" class="text-end">Capacity</th>
+                        <th scope="col" class="text-end">Rooms</th>
+                        <th scope="col">Last updated (UTC)</th>
+                        <th scope="col"><span class="visually-hidden">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for type in types %}
+                        <tr>
+                            <td>{{ type.name }}</td>
+                            <td>{{ type.dorm_name }}</td>
+                            <td>
+                                {# Text as well as colour, so status isn't shown by colour alone. #}
+                                {% if type.status == "published" %}
+                                    <span class="badge text-bg-success">Published</span>
+                                {% else %}
+                                    <span class="badge text-bg-warning">Draft</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">{{ type.capacity }}</td>
+                            <td class="text-end">{{ type.room_count }}</td>
+                            <td>{{ type.updated[:16] if type.updated else "" }}</td>
+                            <td class="text-end text-nowrap">
+                                {# Edit and Publish buttons arrive in A4. The facts page has
+                                   an "Open in 3D" button. #}
+                                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('pages.room_type', type_id=type.id) }}">View</a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p>No room types yet.</p>
+    {% endif %}
+{% endblock %}
