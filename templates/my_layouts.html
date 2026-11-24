@@ -1,0 +1,73 @@
+{% extends "layout.html" %}
+
+{% block title %}My layouts{% endblock %}
+
+{% block main %}
+    <h1 class="h3 mb-3">My layouts</h1>
+
+    {# Messages from layouts.js (e.g. "Renamed." or an error) appear here.
+       aria-live makes screen readers announce them. #}
+    <div id="layouts-status" aria-live="polite"></div>
+
+    {# Both the empty message and the table are always rendered; layouts.js
+       swaps them when the last layout is deleted. #}
+    <p id="layouts-empty" {% if layouts %}hidden{% endif %}>
+        You haven't saved any layouts yet. <a href="{{ url_for('pages.index') }}">Pick a room</a>,
+        arrange the furniture, and press Save.
+    </p>
+
+    {% if layouts %}
+        <div class="table-responsive">
+            <table class="table align-middle" id="layouts-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Name</th>
+                        <th scope="col">Room</th>
+                        <th scope="col" class="text-end">Items</th>
+                        <th scope="col">Last saved</th>
+                        <th scope="col"><span class="visually-hidden">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for layout in layouts %}
+                        <tr data-layout-id="{{ layout.id }}">
+                            <td>
+                                <span class="layout-name">{{ layout.name }}</span>
+                                {# Shown by layouts.js when Rename is pressed. The flex
+                                   layout is on an inner div, because Bootstrap's d-flex
+                                   would override the form's `hidden` attribute. #}
+                                <form class="rename-form" hidden>
+                                    <div class="d-flex gap-2">
+                                        <label class="visually-hidden" for="rename-{{ layout.id }}">New name</label>
+                                        <input id="rename-{{ layout.id }}" name="name" class="form-control form-control-sm"
+                                               value="{{ layout.name }}" maxlength="60" required>
+                                        <button type="submit" class="btn btn-sm btn-crimson">Save</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" data-action="cancel">Cancel</button>
+                                    </div>
+                                </form>
+                            </td>
+                            <td>{{ layout.dorm_name }} · {{ layout.type_name }}</td>
+                            <td class="text-end">{{ layout.item_count }}</td>
+                            <td>
+                                {# SQLite stores UTC as "2026-11-24 07:37:33". The datetime
+                                   attribute holds it in ISO form ("...T07:37:33Z") so
+                                   layouts.js can show it in the viewer's own time zone. #}
+                                <time datetime="{{ layout.updated | replace(' ', 'T') }}Z">{{ layout.updated[:10] }}</time>
+                            </td>
+                            <td class="text-end text-nowrap">
+                                {# /plan/<id> is served once the planner route exists (Claire, P1). #}
+                                <a class="btn btn-sm btn-crimson" href="/plan/{{ layout.room_type_id }}?layout={{ layout.id }}">Open</a>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-action="rename">Rename</button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" data-action="delete">Delete</button>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+{% endblock %}
+
+{% block scripts %}
+    <script type="module" src="{{ url_for('static', filename='js/layouts.js') }}"></script>
+{% endblock %}

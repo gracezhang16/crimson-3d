@@ -91,3 +91,20 @@ Technical choices:
 - **Catalog placements ignore any `label`/size sent with them**; only custom items store those columns.
 - **`updated` is SQLite's `CURRENT_TIMESTAMP`, which is UTC** (`2026-11-24 07:37:33`). The layouts page (S6) should present it in a friendlier way.
 - **`share_url` is built by hand from `request.host_url`** until S7 adds the `/share/<token>` route; it is always `null` until then.
+
+## 2026-11-24 (S6)
+
+Product choices confirmed by Grace before building:
+
+- **Rename and Delete on My layouts call the S5 API from JavaScript** (`static/js/layouts.js`), instead of HTML forms posting to new `POST /layouts/<id>/rename` and `/delete` routes. That reuses the API's validation and ownership checks and adds no routes beyond SPEC.md 7.1. The cost: those two buttons need JavaScript.
+- **No Share buttons until S7**, when share links exist.
+- **My layouts hides layouts whose room type went back to draft**, consistent with the API (S5). Alternative: show them greyed out.
+- **`/my-room` for a room whose type is still a draft shows "You're assigned to {dorm} {number}, but its 3D model isn't published yet"** instead of redirecting to a planner that would 404. Admins are redirected anyway, since they can see drafts.
+
+Technical choices:
+
+- **CONTRACT (new shared file): `static/js/shared/api.js` with `apiFetch(url, {method, body})`**, the "fetch wrappers with error handling" listed in SPEC.md 6. It returns parsed JSON or throws an `Error` whose message is the server's `{"error"}` text (or a readable fallback) with `error.status` set (0 = no answer). Claire's planner can use it for P4 and P6. Tested in `tests/api.test.mjs` with a fake `fetch`.
+- **`current_user()` now includes `room_id`** (LEFT JOIN on `assignments`), so the navbar shows "My room" only to assigned students (SPEC.md 1) without a second query per page.
+- **"Last saved" is sent as UTC in `<time datetime="...Z">` and shown in the viewer's time zone by JavaScript** (`toLocaleString`). Without JavaScript the UTC date is shown. Alternative: format on the server, which can't know the viewer's time zone.
+- **layouts.js builds messages with `textContent`, never `innerHTML`**, so a layout named `<script>` is shown as text, not run.
+- **The rename form's flex layout sits on an inner `<div>`**: Bootstrap's `.d-flex` uses `display: flex !important`, which would override the `hidden` attribute on the form itself.

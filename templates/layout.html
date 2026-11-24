@@ -34,8 +34,15 @@
             <div class="collapse navbar-collapse" id="navbar">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('pages.index') }}">Dorms</a></li>
+                    {% if user %}
+                        {# "My room" only for students an admin has assigned a room (SPEC.md 1). #}
+                        {% if user.room_id %}
+                            <li class="nav-item"><a class="nav-link" href="{{ url_for('pages.my_room') }}">My room</a></li>
+                        {% endif %}
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('pages.my_layouts') }}">My layouts</a></li>
+                    {% endif %}
                 </ul>
-                {# `user` comes from inject_user() in app.py. S6 adds My room and My layouts. #}
+                {# `user` comes from inject_user() in app.py. #}
                 <ul class="navbar-nav">
                     {% if user %}
                         <li class="nav-item"><span class="navbar-text me-md-3">{{ user.email }}</span></li>

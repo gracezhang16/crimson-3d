@@ -6,8 +6,8 @@ from flask import Blueprint, flash, redirect, render_template, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from geometry import signed_area
-from helpers import (VISIBLE_TYPE, apology, check_new_account, db, normalize_email,
-                     viewer_is_admin)
+from helpers import (VISIBLE_TYPE, apology, check_new_account, db, login_required,
+                     normalize_email, viewer_is_admin)
 
 pages = Blueprint("pages", __name__)
 
@@ -154,6 +154,64 @@ def room_type(type_id):
         return apology("We couldn't find that room type.", 404)
     return render_template("room_type.html", room_type=with_facts(rows[0]))
 
+
+# ---------------------------------------------------------------------------
+# Student pages: my room, my layouts
+# ---------------------------------------------------------------------------
+
+@pages.route("/my-room")
+@login_required
+def my_room():
+    """Send a student to the planner for the room an admin assigned them.
+
+    With no assignment, or while the room's type is still a draft (and the
+    viewer isn't an admin), show a page explaining that instead.
+    """
+    rows = db.execute(
+        "SELECT rooms.number, rooms.room_type_id, room_types.status, dorms.name AS dorm_name "
+        "FROM assignments "
+        "JOIN rooms ON rooms.id = assignments.room_id "
+        "JOIN room_types ON room_types.id = rooms.room_type_id "
+        "JOIN dorms ON dorms.id = rooms.dorm_id "
+        "WHERE assignments.user_id = ?",
+        session["user_id"],
+    )
+    if not rows:
+        return render_template("my_room.html", room=None)
+    room = rows[0]
+    if room["status"] == "published" or viewer_is_admin():
+        # /plan/<id> is served once the planner route exists (Claire, P1).
+        return redirect(f"/plan/{room['room_type_id']}")
+    return render_template("my_room.html", room=room)
+
+
+@pages.route("/layouts")
+@login_required
+def my_layouts():
+    """List the student's saved layouts across all rooms, newest first.
+
+    Rename and delete happen in the browser (static/js/layouts.js) through the
+    layouts API, so this route only reads. Layouts whose room type has gone
+    back to draft are hidden, as in the API (see docs/decisions.md, S5).
+    """
+    layouts = db.execute(
+        "SELECT layouts.id, layouts.name, layouts.updated, layouts.room_type_id, "
+        "room_types.name AS type_name, dorms.name AS dorm_name, "
+        "COUNT(placements.id) AS item_count "
+        "FROM layouts "
+        "JOIN room_types ON room_types.id = layouts.room_type_id "
+        "JOIN dorms ON dorms.id = room_types.dorm_id "
+        "LEFT JOIN placements ON placements.layout_id = layouts.id "
+        f"WHERE layouts.user_id = ? AND {VISIBLE_TYPE} "
+        "GROUP BY layouts.id ORDER BY layouts.updated DESC, layouts.id DESC",
+        session["user_id"], int(viewer_is_admin()),
+    )
+    return render_template("my_layouts.html", layouts=layouts)
+
+
+# ---------------------------------------------------------------------------
+# Accounts: register, log in, log out
+# ---------------------------------------------------------------------------
 
 @pages.route("/register", methods=["GET", "POST"])
 def register():

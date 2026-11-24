@@ -292,3 +292,118 @@ def test_drafts_visible_to_admins(client, drafts):
     assert "Secret triple" in dorm_page and "Draft" in dorm_page
     assert "Secret triple" in client.get("/?q=secret").get_data(as_text=True)
     assert "Hidden House" in client.get("/").get_data(as_text=True)
+
+
+# --- Student pages: my room, my layouts (S6) --------------------------------
+
+def assign_room(user_id, type_name="Single (sample)", number="B-21"):
+    """Create a room of this type in its dorm and assign it to the user."""
+    room_type = db.execute("SELECT id, dorm_id FROM room_types WHERE name = ?", type_name)[0]
+    room_id = db.execute(
+        "INSERT INTO rooms (dorm_id, number, room_type_id) VALUES (?, ?, ?)",
+        room_type["dorm_id"], number, room_type["id"],
+    )
+    db.execute("INSERT INTO assignments (user_id, room_id) VALUES (?, ?)", user_id, room_id)
+    return room_type["id"]
+
+
+def add_layout(user_id, type_name, name, placements=1):
+    """Insert a layout with this many beds and return its id."""
+    layout_id = db.execute(
+        "INSERT INTO layouts (user_id, room_type_id, name) VALUES (?, ?, ?)",
+        user_id, type_id(type_name), name,
+    )
+    for _ in range(placements):
+        db.execute(
+            "INSERT INTO placements (layout_id, furniture_id, x, y) VALUES (?, 1, 20, 42)", layout_id
+        )
+    return layout_id
+
+
+def test_my_room_needs_login(client):
+    response = client.get("/my-room")
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/login"
+
+
+def test_my_room_without_assignment(client):
+    log_in(client, add_user())
+    response = client.get("/my-room")
+    assert response.status_code == 200
+    assert "No room has been assigned" in response.get_data(as_text=True)
+
+
+def test_assigned_student_lands_on_their_planner(client):
+    user_id = add_user()
+    room_type_id = assign_room(user_id)
+    log_in(client, user_id)
+    response = client.get("/my-room")
+    assert response.status_code == 302
+    assert response.headers["Location"] == f"/plan/{room_type_id}"
+
+
+def test_my_room_with_draft_type_explains(client):
+    user_id = add_user()
+    room_type_id = assign_room(user_id)
+    db.execute("UPDATE room_types SET status = 'draft' WHERE id = ?", room_type_id)
+    log_in(client, user_id)
+    response = client.get("/my-room")
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    assert "Demo Hall B-21" in page
+    assert "isn't published yet" in page
+
+
+def test_navbar_shows_my_room_only_when_assigned(client):
+    user_id = add_user()
+    log_in(client, user_id)
+    page = client.get("/").get_data(as_text=True)
+    assert "My layouts" in page
+    assert "My room" not in page
+
+    assign_room(user_id)
+    assert "My room" in client.get("/").get_data(as_text=True)
+
+
+def test_navbar_hides_student_links_when_logged_out(client):
+    page = client.get("/").get_data(as_text=True)
+    assert "My layouts" not in page and "My room" not in page
+
+
+def test_my_layouts_needs_login(client):
+    response = client.get("/layouts")
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/login"
+
+
+def test_my_layouts_empty(client):
+    log_in(client, add_user())
+    page = client.get("/layouts").get_data(as_text=True)
+    assert "haven't saved any layouts" in page
+    assert 'id="layouts-table"' not in page
+
+
+def test_my_layouts_lists_own_layouts_across_rooms(client):
+    me = add_user("me@example.com")
+    other = add_user("other@example.com")
+    single_layout = add_layout(me, "Single (sample)", "Cozy corner", placements=3)
+    double_layout = add_layout(me, "Double (sample)", "Bunk-free")
+    add_layout(other, "Single (sample)", "Not mine")
+
+    log_in(client, me)
+    page = client.get("/layouts").get_data(as_text=True)
+    assert "Cozy corner" in page and "Bunk-free" in page
+    assert "Not mine" not in page
+    assert "Demo Hall · Single (sample)" in page
+    assert f'href="/plan/{type_id("Single (sample)")}?layout={single_layout}"' in page
+    assert f'data-layout-id="{double_layout}"' in page
+    assert '<td class="text-end">3</td>' in page          # item count
+    assert "/static/js/layouts.js" in page
+
+
+def test_my_layouts_hides_layouts_of_draft_rooms(client):
+    me = add_user()
+    add_layout(me, "Single (sample)", "Hidden for now")
+    db.execute("UPDATE room_types SET status = 'draft' WHERE name = 'Single (sample)'")
+    log_in(client, me)
+    assert "Hidden for now" not in client.get("/layouts").get_data(as_text=True)
