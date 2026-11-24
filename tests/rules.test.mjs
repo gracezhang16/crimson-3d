@@ -1,13 +1,14 @@
 // Tests for static/js/planner/rules.js. Run with: node --test tests/*.test.mjs
 // P3: zones. P4: item sizes and footprints. P5: overlap, inside, snap, free spot.
-// P7 adds flat items, clearance and issues.
+// P7: evaluate (flat items, clearance, issues and their priority).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
 
 import {
-  findFreeSpot, footprint, footprintBox, insideRoom, itemDimensions, overlaps,
-  pointInPolygon, snap, zones,
+  evaluate, findFreeSpot, footprint, footprintBox, insideRoom, itemDimensions, mayOverlap,
+  overlaps, pointInPolygon, snap, zones,
 } from "../static/js/planner/rules.js";
 
 // 114 × 150 rectangle, clockwise from the top-left: walls 0 N, 1 E, 2 S, 3 W.
@@ -219,4 +220,100 @@ test("findFreeSpot never picks the L-shape's cut-out", () => {
 test("snap with flush off (arrow keys) leaves small gaps alone but still keeps items in", () => {
   assert.deepEqual(snap({ x: 22, y: 70 }, DESK, 0, RECT, { flush: false }), { x: 22, y: 70 });
   assert.deepEqual(snap({ x: 10, y: 70 }, DESK, 0, RECT, { flush: false }), { x: 21, y: 70 });
+});
+
+
+// --- P7: evaluate ---------------------------------------------------------------
+
+const SIZES = {
+  bed: { name: "Bed, twin XL", width: 40, depth: 84, height: 36, clearance: 14 },
+  desk: { name: "Desk", width: 42, depth: 24, height: 30, clearance: 0 },
+  bin: { name: "Storage bin", width: 24, depth: 16, height: 13, clearance: 0 },
+  fridge: { name: "Mini fridge", width: 19, depth: 20, height: 33, clearance: 0 },
+  rug: { name: "Rug, 5 × 8 ft", width: 60, depth: 96, height: 1, clearance: 0 },
+  futon: { name: "Futon", width: 72, depth: 34, height: 32, clearance: 0 },
+};
+
+/** A room for these tests: the 114 x 150 rectangle with any features. */
+const testRoom = (...features) => ({ outline: RECT, features });
+
+/** Place a named item centred at (x, y). */
+const at = (name, x, y, rotation = 0) => ({ placement: { x, y, rotation }, item: SIZES[name] });
+
+test("items that fit have no issue", () => {
+  assert.deepEqual(evaluate(testRoom(), [at("bed", 20, 42), at("desk", 93, 12)]), [null, null]);
+});
+
+test("too big for this room: doesn't fit turned either way", () => {
+  const huge = { placement: { x: 57, y: 75, rotation: 0 }, item: { ...SIZES.desk, width: 160, depth: 120 } };
+  assert.deepEqual(evaluate(testRoom(), [huge]), ["Too big for this room"]);
+  // 140 x 100 fits the 114 x 150 room if turned, so it's only outside the room.
+  const turnable = { placement: { x: 57, y: 75, rotation: 0 }, item: { ...SIZES.desk, width: 140, depth: 100 } };
+  assert.deepEqual(evaluate(testRoom(), [turnable]), ["Outside the room"]);
+});
+
+test("outside the room, including the inner corner of an L-shape", () => {
+  assert.deepEqual(evaluate(testRoom(), [at("desk", 100, 12)]), ["Outside the room"]);
+  const lRoom = { outline: L_SHAPE, features: [] };
+  assert.deepEqual(evaluate(lRoom, [at("desk", 70, 60)]), ["Outside the room"]);
+  assert.deepEqual(evaluate(lRoom, [at("desk", 30, 100, 90)]), [null]);
+});
+
+test("blocks the door, blocks the closet, hits the radiator", () => {
+  const room = testRoom(
+    { kind: "door", wall: 0, offset: 0, width: 34, height: 80 },
+    { kind: "closet", wall: 3, offset: 0, width: 60, height: 84 },
+    { kind: "radiator", wall: 1, offset: 50, width: 30 },
+  );
+  assert.deepEqual(evaluate(room, [at("fridge", 20, 20)]), ["Blocks the door"]);
+  assert.deepEqual(evaluate(room, [at("fridge", 15, 120)]), ["Blocks the closet"]);
+  assert.deepEqual(evaluate(room, [at("fridge", 100, 65)]), ["Hits the radiator"]);
+});
+
+test("overlapping items both get an issue naming the other", () => {
+  assert.deepEqual(evaluate(testRoom(), [at("bed", 20, 42), at("desk", 45, 42)]),
+    ["Overlaps the desk", "Overlaps the bed, twin XL"]);
+});
+
+test("touching edges is fine", () => {
+  assert.deepEqual(evaluate(testRoom(), [at("bed", 20, 42), at("desk", 61, 12)]), [null, null]);
+});
+
+test("rule 3: a rug never collides, with a door zone or with furniture", () => {
+  const room = testRoom({ kind: "door", wall: 0, offset: 0, width: 34, height: 80 });
+  assert.deepEqual(evaluate(room, [at("rug", 30, 48)]), [null]);                       // over the door zone
+  assert.deepEqual(evaluate(testRoom(), [at("rug", 60, 100), at("bed", 94, 108)]), [null, null]); // under the bed
+});
+
+test("rule 4: a storage bin fits under the bed, a mini fridge doesn't", () => {
+  assert.deepEqual(evaluate(testRoom(), [at("bed", 20, 42), at("bin", 20, 42)]), [null, null]);
+  assert.deepEqual(evaluate(testRoom(), [at("bed", 20, 42), at("fridge", 20, 42)]),
+    ["Overlaps the mini fridge", "Overlaps the bed, twin XL"]);
+});
+
+test("mayOverlap is symmetric", () => {
+  assert.equal(mayOverlap(SIZES.bed, SIZES.bin), true);
+  assert.equal(mayOverlap(SIZES.bin, SIZES.bed), true);
+  assert.equal(mayOverlap(SIZES.desk, SIZES.futon), false);
+});
+
+test("priority: outside beats a zone, a zone beats an overlap (rule 8)", () => {
+  const room = testRoom({ kind: "door", wall: 0, offset: 0, width: 34, height: 80 });
+  // In the door zone and overlapping the fridge: the door wins.
+  assert.equal(evaluate(room, [at("desk", 25, 15), at("fridge", 20, 15)])[0], "Blocks the door");
+  // Poking out of the room and overlapping: outside wins.
+  assert.equal(evaluate(testRoom(), [at("futon", 100, 75), at("desk", 93, 75)])[0], "Outside the room");
+});
+
+test("the sample rooms' default layouts have no issues", () => {
+  const root = new URL("../seed/", import.meta.url);
+  const catalog = JSON.parse(readFileSync(new URL("furniture.json", root), "utf8"));
+  const bySlug = new Map(catalog.map((item) => [item.slug, { ...item, name: item.name }]));
+  for (const file of readdirSync(new URL("rooms/", root)).filter((f) => f.endsWith(".json"))) {
+    const room = JSON.parse(readFileSync(new URL(`rooms/${file}`, root), "utf8"));
+    const entries = room.default_layout.map(({ slug, x, y, rotation }) => ({
+      placement: { x, y, rotation }, item: bySlug.get(slug),
+    }));
+    assert.deepEqual(evaluate(room.geometry, entries), entries.map(() => null), file);
+  }
 });

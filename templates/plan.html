@@ -66,6 +66,7 @@
                 <h2 class="planner-heading">Selected</h2>
                 <p class="mb-0 fw-semibold" id="selection-name"></p>
                 <p class="small text-body-secondary mb-1" id="selection-size"></p>
+                <p class="small mb-1 issue-text" id="selection-issue" hidden></p>
                 <div class="d-flex gap-2">
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="rotate-button">Rotate 90°</button>
                     <button type="button" class="btn btn-sm btn-outline-danger" id="delete-button">Delete</button>
@@ -100,6 +101,9 @@
         <div class="planner-scene">
             {# main.js replaces this canvas with a message if WebGL is unavailable. #}
             <canvas id="scene" aria-label="3D view of the room"></canvas>
+            {# "Everything fits" or "N items don't fit" (SPEC.md 4.5 rule 8); panel.js
+               fills it, and screen readers announce changes. #}
+            <div id="fit-status" class="fit-pill" role="status" aria-live="polite" hidden></div>
         </div>
     </div>
 {% endblock %}

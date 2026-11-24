@@ -12,6 +12,8 @@
 import * as THREE from "three";
 
 const LABEL_PIXELS_PER_INCH = 8;   // label texture resolution
+const ISSUE_ORANGE = new THREE.Color("#f08c2e"); // SPEC.md 4.5 rule 8: items with an issue are tinted orange
+const ISSUE_TINT = 0.65;                         // how far towards orange (0 = none, 1 = fully orange)
 const LABEL_FONT = "600 {size}px system-ui, -apple-system, 'Segoe UI', sans-serif";
 
 /**
@@ -39,6 +41,20 @@ export function makeFurniture(placement, item) {
 }
 
 /**
+ * Tint an item orange when it has an issue, or restore its catalog colour.
+ * The issue's text is always shown in the panel too, so colour isn't the
+ * only signal (SPEC.md 11).
+ *
+ * @param {THREE.Group} group - from makeFurniture()
+ * @param {boolean} hasIssue
+ */
+export function setIssueTint(group, hasIssue) {
+  const body = group.children[0];
+  const base = body.userData.baseColor;
+  body.material.color.copy(hasIssue ? base.clone().lerp(ISSUE_ORANGE, ISSUE_TINT) : base);
+}
+
+/**
  * The box: width along local x, depth along local z, standing on the floor.
  * At rotation 0 that puts width along plan x and depth along plan y, with
  * the front facing +y (south), as SPEC.md 4.4 says.
@@ -51,6 +67,7 @@ function makeBody(item) {
   geometry.translate(0, item.height / 2, 0); // bottom on the floor
   const color = new THREE.Color(item.color);
   const body = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color, roughness: 0.8 }));
+  body.userData.baseColor = color.clone(); // so setIssueTint() can switch back
   // Darker outline along the edges, so the top reads clearly from above.
   body.add(new THREE.LineSegments(
     new THREE.EdgesGeometry(geometry),

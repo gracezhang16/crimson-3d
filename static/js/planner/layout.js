@@ -8,14 +8,15 @@
  * something new to save), { content: false } for selection-only changes and
  * for loading.
  *
- * Each entry is { placement, item, group }: the placement in the SPEC.md
- * 4.4 format, the item's size and colour (rules.itemDimensions), and its
- * three.js group (furniture.makeFurniture).
+ * Each entry is { placement, item, group, issue }: the placement in the
+ * SPEC.md 4.4 format, the item's size and colour (rules.itemDimensions), its
+ * three.js group (furniture.makeFurniture), and its issue from
+ * rules.evaluate() ("Blocks the door", ...) or null if it fits.
  */
 
 import * as THREE from "three";
-import { makeFurniture } from "./furniture.js";
-import { findFreeSpot, footprint, footprintBox, itemDimensions, snap, zones } from "./rules.js";
+import { makeFurniture, setIssueTint } from "./furniture.js";
+import { evaluate, findFreeSpot, footprint, footprintBox, itemDimensions, snap, zones } from "./rules.js";
 
 const SELECTION_COLOR = 0xa51c30;  // crimson (SPEC.md 8.4)
 const SELECTION_MARGIN = 1.5;      // inches between the item and its outline
@@ -42,6 +43,13 @@ export function createLayout(geometry, catalogById, scene, requestRender) {
    * @param {boolean} content - true if the furniture changed, not just the selection
    */
   function changed(content) {
+    // SPEC.md 8.5: after every change, re-run the rules and update the tints.
+    // (A hundred items at most, so checking every pair each time is quick.)
+    const issues = evaluate(geometry, entries);
+    entries.forEach((entry, i) => {
+      entry.issue = issues[i];
+      setIssueTint(entry.group, entry.issue !== null);
+    });
     updateSelectionOutline(outlineMesh, selected);
     requestRender();
     listeners.forEach((listener) => listener({ content }));

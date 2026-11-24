@@ -3,9 +3,9 @@
  *
  * PURE: imports nothing from three.js or the DOM, so `node --test` can run it
  * (tests/rules.test.mjs). P3 added the zones that wall features create on the
- * floor; P4 added item sizes and footprints; P5 adds overlap, inside-the-room,
- * snapping and finding a free spot; P7 adds flat items, under-bed clearance
- * and the issues list.
+ * floor; P4 added item sizes and footprints; P5 added overlap, inside-the-room,
+ * snapping and finding a free spot; P7 adds evaluate(): flat items, under-bed
+ * clearance and each item's issue (SPEC.md 4.5 rules 3, 4, 6 and 8).
  *
  * Coordinates are plan inches, [x, y] with y pointing south (SPEC.md 4.1).
  */
@@ -358,4 +358,92 @@ export function findFreeSpot(size, rotation, outline, others) {
     }
   }
   return { x: (room.minX + room.maxX) / 2, y: (room.minY + room.maxY) / 2 };
+}
+
+
+// --- P7: issues (rules 3, 4, 6, 8) ---------------------------------------------
+
+const FLAT_HEIGHT = 1; // inches; items this low (rugs) never collide (rule 3)
+
+/**
+ * Could the item fit inside the room's bounding box, turned either way?
+ * If not, no amount of moving or turning helps: "Too big for this room".
+ *
+ * @param {{width: number, depth: number}} size
+ * @param {number[][]} outline
+ * @returns {boolean}
+ */
+function fitsInRoom(size, outline) {
+  const room = outlineBox(outline);
+  const across = room.maxX - room.minX;
+  const down = room.maxY - room.minY;
+  return (size.width <= across && size.depth <= down) || (size.depth <= across && size.width <= down);
+}
+
+/**
+ * May two items overlap without it being a problem?
+ * Rule 3: a flat item (a rug) never collides with anything.
+ * Rule 4: an item no taller than the other's clearance fits underneath it
+ * (a 13 in storage bin under a bed with 14 in clearance).
+ *
+ * @param {{height: number, clearance: number}} a
+ * @param {{height: number, clearance: number}} b
+ * @returns {boolean}
+ */
+export function mayOverlap(a, b) {
+  return a.height <= FLAT_HEIGHT || b.height <= FLAT_HEIGHT ||
+    a.height <= b.clearance || b.height <= a.clearance;
+}
+
+/**
+ * "Bed, twin XL" -> "bed, twin XL", for "Overlaps the bed, twin XL".
+ * Only the first letter changes, so "XL" stays as it is.
+ * @param {string} name
+ * @returns {string}
+ */
+function lowerFirst(name) {
+  return name.charAt(0).toLowerCase() + name.slice(1);
+}
+
+/**
+ * Rule 8: each item's issue, or null if it fits. At most one issue per item,
+ * the first that applies in this order: too big, outside the room, blocks
+ * the door, blocks the closet, hits the radiator, overlaps another item.
+ *
+ * Zones are compared by their bounding boxes, which are exact for walls that
+ * run north-south or east-west (all our rooms) and slightly generous for an
+ * angled wall.
+ *
+ * @param {{outline: number[][], features: object[]}} geometry
+ * @param {{placement: object, item: {name: string, width: number, depth: number,
+ *   height: number, clearance: number}}[]} entries - from layout.js
+ * @returns {(string | null)[]} entries[i]'s issue
+ */
+export function evaluate(geometry, entries) {
+  const { outline } = geometry;
+  const roomZones = zones(geometry);
+  const boxes = entries.map((entry) => footprintBox(entry.placement, entry.item));
+
+  return entries.map((entry, i) => {
+    const { item } = entry;
+    const box = boxes[i];
+    if (!fitsInRoom(item, outline)) {
+      return "Too big for this room";
+    }
+    if (!insideRoom(box, outline)) {
+      return "Outside the room";
+    }
+    if (item.height <= FLAT_HEIGHT) {
+      return null; // rule 3: nothing else applies to a rug
+    }
+    for (const kind of ["door", "closet", "radiator"]) {
+      const zone = roomZones.find((z) => z.kind === kind && overlaps(box, z.box));
+      if (zone) {
+        return zone.issue;
+      }
+    }
+    const other = entries.findIndex((candidate, j) =>
+      j !== i && overlaps(box, boxes[j]) && !mayOverlap(item, candidate.item));
+    return other >= 0 ? `Overlaps the ${lowerFirst(entries[other].item.name)}` : null;
+  });
 }

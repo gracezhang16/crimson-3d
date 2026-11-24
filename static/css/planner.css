@@ -160,3 +160,38 @@
     box-shadow: inset 3px 0 0 var(--crimson);
     font-weight: 600;
 }
+
+/* --- P7: issues ---------------------------------------------------------- */
+
+/* Issue text, always shown with the orange tint so colour isn't the only signal. */
+.issue-text {
+    color: #a3530c;
+    font-weight: 600;
+}
+
+.room-items button.has-issue {
+    border-color: #f08c2e;
+}
+
+/* The status pill, floating over the top-left of the 3D view. */
+.fit-pill {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    pointer-events: none; /* drags pass through to the canvas */
+    box-shadow: 0 1px 3px rgb(0 0 0 / 15%);
+}
+
+.fit-pill-ok {
+    background: #e3f4ea;
+    color: #1f6b45;
+}
+
+.fit-pill-issues {
+    background: #fde8d4;
+    color: #8a4207;
+}

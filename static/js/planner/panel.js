@@ -1,9 +1,10 @@
 /**
  * The planner's side panel (SPEC.md 8.6). Claire.
  *
- * P5: catalog "add" buttons (Harvard furniture, things to buy), the
- * selection card (name, size, Rotate, Delete) and a list of the items in the
- * room. P6 adds layout controls, P8 the "Will it fit?" form.
+ * Catalog "add" buttons (Harvard furniture, things to buy), the selection
+ * card (name, size, issue, Rotate, Delete), the list of items in the room
+ * with their issues, and the status pill over the 3D view (P7). Layout
+ * controls are in saving.js; the "Will it fit?" form arrives in P8.
  *
  * Text is always set with textContent, never innerHTML, so a catalog name
  * can't inject HTML.
@@ -12,13 +13,15 @@
 import { formatFeetInches } from "../shared/units.js";
 
 /**
- * Build one button with a name and a size line underneath.
+ * Build one button with a name and a size line underneath, and optionally
+ * an issue line ("⚠ Blocks the door") below that.
  *
  * @param {string} name
  * @param {string} size
+ * @param {string | null} [issue]
  * @returns {HTMLButtonElement}
  */
-function itemButton(name, size) {
+function itemButton(name, size, issue = null) {
   const button = document.createElement("button");
   button.type = "button";
   const title = document.createElement("span");
@@ -27,7 +30,29 @@ function itemButton(name, size) {
   dims.className = "catalog-size";
   dims.textContent = size;
   button.append(title, dims);
+  if (issue) {
+    const warning = document.createElement("span");
+    warning.className = "issue-text";
+    warning.textContent = `⚠ ${issue}`;
+    button.append(warning);
+    button.classList.add("has-issue");
+  }
   return button;
+}
+
+/**
+ * Show "Everything fits" or "N items don't fit" over the 3D view.
+ * @param {object[]} entries
+ */
+function updateFitStatus(entries) {
+  const pill = document.querySelector("#fit-status");
+  const problems = entries.filter((entry) => entry.issue).length;
+  pill.hidden = false;
+  pill.classList.toggle("fit-pill-ok", problems === 0);
+  pill.classList.toggle("fit-pill-issues", problems > 0);
+  pill.textContent = problems === 0
+    ? "✓ Everything fits"
+    : `⚠ ${problems} ${problems === 1 ? "item doesn't" : "items don't"} fit`;
 }
 
 /**
@@ -75,12 +100,15 @@ export function createPanel(layout, catalog) {
       document.querySelector("#selection-name").textContent = name;
       document.querySelector("#selection-size").textContent =
         `${formatFeetInches(width)} wide × ${formatFeetInches(depth)} deep × ${formatFeetInches(height)} tall`;
+      const issue = document.querySelector("#selection-issue");
+      issue.hidden = !selected.issue;
+      issue.textContent = selected.issue ? `⚠ ${selected.issue}` : "";
     }
 
     const entries = layout.entries();
     document.querySelector("#room-item-count").textContent = `(${entries.length})`;
     roomItems.replaceChildren(...entries.map((entry) => {
-      const button = itemButton(entry.item.name, footprintText(entry.item));
+      const button = itemButton(entry.item.name, footprintText(entry.item), entry.issue);
       // aria-pressed tells screen readers (and our CSS) which one is selected.
       button.setAttribute("aria-pressed", String(entry === selected));
       button.addEventListener("click", () => layout.select(entry));
@@ -88,6 +116,7 @@ export function createPanel(layout, catalog) {
       item.append(button);
       return item;
     }));
+    updateFitStatus(entries);
   }
 
   layout.onChange(() => refresh());

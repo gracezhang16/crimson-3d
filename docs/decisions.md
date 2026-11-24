@@ -275,3 +275,15 @@ Technical choices:
 - **`insert_placements`, `run_in_transaction` and `placements_error` moved from `api.py` to `helpers.py`**, since both the layouts API and the admin endpoint use them. `api.py` behaves exactly as before; all its tests still pass, including the rollback test.
 - **The endpoint uses `@admin_required` like every admin route** (SPEC.md 7.3), so a student's request gets the HTML 403 page rather than JSON. The planner's `apiFetch` still shows a readable message ("Something went wrong (error 403)"), and only admins reach this page anyway.
 - **Tested end to end in headless Chrome**: an admin drags the bed on the default-layout page and saves; logged out, `/api/types/<id>` and the planner show the new position.
+
+## 2026-11-24 (P7, built for Claire with the team's agreement)
+
+- **"Too big for this room" means the item doesn't fit inside the room's bounding box turned either way**, so no amount of moving or turning helps. An item that would fit if turned gets "Outside the room" instead. The spec names the issue but doesn't define it.
+- **`rules.evaluate(geometry, entries)` gives each item at most one issue in SPEC.md's order** (too big, outside, door, closet, radiator, overlap), as rule 8 asks. Both items in an overlap get an issue naming the other ("Overlaps the bed, twin XL"); only the first letter of the name is lower-cased, so "XL" stays.
+- **Rule 3 (flat items):** a rug (height ≤ 1 in) skips zones and overlaps entirely, but can still be "Too big" or "Outside the room", since those aren't collisions.
+- **Rule 4 (clearance):** two items may overlap if either fits under the other (`height ≤ clearance`), checked both ways (`mayOverlap`).
+- **Zones are compared by bounding box**: exact for walls running north-south or east-west (all our rooms), slightly generous for angled walls.
+- **The rules re-run after every change inside `layout.js`**, so tints, the pill, the selection card and the item list always agree. At most 100 items, so checking every pair each time is cheap.
+- **Issues are shown in words as well as orange**: the selection card and each "In this room" entry show "⚠ Blocks the door", and the status pill uses ✓ / ⚠ plus text, so colour is never the only signal (SPEC.md 11). The pill is `role="status"`, so screen readers announce changes.
+- **A node test runs both sample rooms' default layouts through `evaluate`** and expects no issues, so a seed edit that creates a clash fails the tests.
+- **Wall snapping (rule 7) was already done in P5.**
