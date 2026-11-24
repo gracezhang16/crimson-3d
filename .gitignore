@@ -221,3 +221,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Crimson3D
+# Flask-Session stores server-side sessions here (one file per session).
+flask_session/
+# Development databases. At submission, build crimson3d.db with real data
+# and add it to the ZIP by hand (SPEC.md section 6).
+*.db

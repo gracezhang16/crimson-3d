@@ -1,0 +1,28 @@
+{% extends "layout.html" %}
+
+{% block title %}Dorms{% endblock %}
+
+{% block main %}
+    <h1 class="h3 mb-2">Plan your dorm room before you buy anything</h1>
+    <p class="text-body-secondary mb-4">
+        Pick a dorm to open its rooms in 3D, at true size, and try out your furniture.
+    </p>
+
+    {% if dorms %}
+        <ul class="list-group">
+            {% for dorm in dorms %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>
+                        {{ dorm.name }}
+                        {% if dorm.yard %}<span class="text-body-secondary small">· {{ dorm.yard }}</span>{% endif %}
+                    </span>
+                    <span class="badge text-bg-secondary rounded-pill">
+                        {{ dorm.type_count }} room type{{ "s" if dorm.type_count != 1 }}
+                    </span>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No dorms yet. Run <code>python init_db.py</code> to load the sample rooms.</p>
+    {% endif %}
+{% endblock %}

@@ -1,0 +1,11 @@
+/* Site-wide styles. Use Bootstrap utility classes first; add rules here only
+   when Bootstrap has no utility for it. The planner has its own planner.css. */
+
+:root {
+    --crimson: #a51c30;
+}
+
+/* Navbar background. Bootstrap has no crimson, so we define one class. */
+.bg-crimson {
+    background-color: var(--crimson);
+}
