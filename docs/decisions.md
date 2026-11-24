@@ -133,3 +133,13 @@ Technical choices:
 - **Wall labels go on the two full-height walls farthest from the camera**, as HTML positioned by projecting each wall's top centre each frame. They are hidden when the point is behind the camera, and the 3D area clips them (`overflow: hidden`).
 - **The camera now orbits the centre of the room's box (half the ceiling height), not the floor.** Aiming at the floor cut off the top of the walls; panning keeps that height.
 - **`scene.js` gained `addFrameCallback(fn)`** so modules can update things that depend on the camera (stubs, labels) right before each frame.
+
+## 2026-11-24 (P3, built for Claire with the team's agreement)
+
+- **Zones live in `rules.js` from P3** (`zones(geometry)`: corners plus bounding box plus issue text) even though the rest of `rules.js` is P7. P3 draws door zones, and P7 checks furniture against the same zones, so there is one definition. Each zone is a rectangle against the wall, as wide as the feature: door = width deep, closet = 24 in, radiator = its depth (default 6 in), per SPEC.md 4.3.
+- **Features are placed with `featureSpan()` from `shared/geometry.js`**, the same function the builder preview uses (A3), so "offset from the left corner as seen from inside" is computed in exactly one place.
+- **Each feature is built in its own space** (x along the wall, y up, z into the room), then turned with `rotation.y = atan2(nx, ny)` so its z axis follows the wall's inward normal. One placement function serves every kind of feature and every wall angle.
+- **Doors, windows, closets and outlets hide with their wall when it drops to a stub**; radiators and door zones stay because they're on the floor and affect furniture. Alternative: show features on stubs, which would leave doors floating in mid-air.
+- **Only door zones are tinted for now** (SPEC.md 4.3 asks for that one). Closet and radiator zones are computed and will matter in P7.
+- **No door-swing arcs**: the room format has no hinge side, so neither the planner nor the builder draws one. Adding a hinge would change SPEC.md 4 and needs all three teammates.
+- **Checked with a scratch "Feature test" room** (door, window, radiator and outlet on the north wall, closet on the west wall), because both sample rooms put their door on the south wall, which is a stub from the default view.

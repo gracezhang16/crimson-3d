@@ -1,6 +1,6 @@
 /**
- * Room geometry (SPEC.md 4) -> three.js objects: floor, walls and the
- * dollhouse stubs (SPEC.md 8.3). Features on the walls arrive in P3.
+ * Room geometry (SPEC.md 4) -> three.js objects: floor, walls, the
+ * dollhouse stubs (SPEC.md 8.3) and the wall features (features.js).
  *
  * Plan [x, y] maps to three.js (x, 0, y): plan y (south) becomes three.js z,
  * and three.js y points up. 1 unit = 1 inch.
@@ -8,6 +8,7 @@
 
 import * as THREE from "three";
 import { inwardNormal, wallLength, walls } from "../shared/geometry.js";
+import { buildFeatures } from "./features.js";
 import { cameraOutsideWall, isConvexCorner } from "./roomMath.js";
 
 const WALL_THICKNESS = 5;   // inches, standing outside the outline (SPEC.md 8.3)
@@ -21,7 +22,7 @@ const WALL_EDGE_COLOR = 0x9aa1ad;
 /**
  * Build the room's three.js objects.
  *
- * @param {{ceiling: number, outline: number[][]}} geometry - the room format
+ * @param {{ceiling: number, outline: number[][], features: object[]}} geometry - the room format
  * @returns {{group: THREE.Group, bounds: THREE.Box3, walls: object[],
  *   update: (camera: THREE.Camera) => void}}
  *   `walls[i]` has `mesh`, `length`, `top` (the 3D point at the top centre of
@@ -35,6 +36,10 @@ export function buildRoom(geometry) {
   const wallParts = walls(outline).map((_, i) => makeWall(outline, i, ceiling));
   wallParts.forEach((part) => group.add(part.mesh));
 
+  const features = buildFeatures(geometry);
+  features.onWall.forEach((wallFeatures) => group.add(wallFeatures));
+  group.add(features.onFloor);
+
   const xs = outline.map(([x]) => x);
   const ys = outline.map(([, y]) => y);
   const bounds = new THREE.Box3(
@@ -44,7 +49,9 @@ export function buildRoom(geometry) {
 
   /**
    * Dollhouse view: drop every wall that stands between the camera and the
-   * room to a stub; raise the others to full height.
+   * room to a stub, hiding the doors, windows and so on mounted on it; raise
+   * the others to full height. Radiators and door zones are on the floor, so
+   * they always show.
    * @param {THREE.Camera} camera
    */
   function update(camera) {
@@ -52,6 +59,7 @@ export function buildRoom(geometry) {
     wallParts.forEach((part, i) => {
       part.isStub = cameraOutsideWall(outline, i, cameraPlan);
       setWallHeight(part.mesh, part.isStub ? STUB_HEIGHT : ceiling);
+      features.onWall[i].visible = !part.isStub;
     });
   }
 

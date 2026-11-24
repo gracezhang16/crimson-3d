@@ -2,8 +2,8 @@
  * Planner entry point (SPEC.md 8.1): read the page's data-* attributes, load
  * the room, build the scene and wire the modules together.
  *
- * P2: the room's floor, walls (with dollhouse stubs) and wall labels, loaded
- * from /api/types/<id>. Furniture arrives in P4.
+ * P3: the room's floor, walls (with dollhouse stubs), wall features, door
+ * zones and wall labels, loaded from /api/types/<id>. Furniture arrives in P4.
  */
 
 import { apiFetch } from "../shared/api.js";
