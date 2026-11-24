@@ -2,22 +2,51 @@
 
 {# The room builder (Hannah), SPEC.md 9.1. builder/main.js turns the form into
    the room format, draws the live preview and fills the hidden "geometry"
-   field. A2: shape and details. A3: features table. A4 adds saving. #}
+   field. A2: shape and details. A3: features table. A4: save, edit, publish.
+   `room_type` is None for a new room type, or the saved row when editing. #}
 
-{% block title %}New room type · Admin{% endblock %}
+{% block title %}{{ room_type.name if room_type else "New room type" }} · Admin{% endblock %}
 
 {% block main %}
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}">Admin</a></li>
             <li class="breadcrumb-item"><a href="{{ url_for('admin.room_types') }}">Room types</a></li>
-            <li class="breadcrumb-item active" aria-current="page">New</li>
+            <li class="breadcrumb-item active" aria-current="page">{{ room_type.name if room_type else "New" }}</li>
         </ol>
     </nav>
 
-    <h1 class="h3 mb-3">New room type</h1>
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+        <h1 class="h3 mb-0 me-2">{{ room_type.name if room_type else "New room type" }}</h1>
+        {% if room_type %}
+            {% if room_type.status == "published" %}
+                <span class="badge text-bg-success">Published</span>
+            {% else %}
+                <span class="badge text-bg-warning">Draft</span>
+            {% endif %}
+        {% endif %}
+    </div>
 
-    <form id="room-type-form" method="post" novalidate>
+    {% if room_type and room_type.status == "published" %}
+        <div class="alert alert-warning" role="alert">
+            This room type is published. Saving changes what students see straight away.
+        </div>
+    {% endif %}
+
+    {% if errors %}
+        <div class="alert alert-danger" role="alert">
+            <p class="mb-1">Not saved yet. Please fix:</p>
+            <ul class="mb-0">
+                {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    {# data-geometry carries a saved (or just-submitted) room to main.js, which
+       fills the shape and features from it; empty for a new room type. #}
+    <form id="room-type-form" method="post" novalidate
+          action="{{ url_for('admin.edit_room_type', type_id=room_type.id) if room_type else url_for('admin.new_room_type') }}"
+          data-geometry="{{ geometry_text }}">
         <input type="hidden" name="geometry" value="">
 
         <div class="row g-4">
@@ -28,7 +57,7 @@
                         <label for="dorm_id" class="form-label">Dorm</label>
                         <select id="dorm_id" name="dorm_id" class="form-select" required>
                             {% for dorm in dorms %}
-                                <option value="{{ dorm.id }}">{{ dorm.name }}</option>
+                                <option value="{{ dorm.id }}" {% if values.dorm_id == dorm.id | string %}selected{% endif %}>{{ dorm.name }}</option>
                             {% endfor %}
                         </select>
                         <div class="form-text"><a href="{{ url_for('admin.dorms') }}">Add a dorm</a></div>
@@ -36,19 +65,19 @@
                     <div class="col-sm-6">
                         <label for="name" class="form-label">Name</label>
                         <input id="name" name="name" class="form-control" maxlength="60" required
-                               placeholder="e.g. Single, 4th floor">
+                               placeholder="e.g. Single, 4th floor" value="{{ values.name }}">
                     </div>
                     <div class="col-sm-6">
                         <label for="capacity" class="form-label">Capacity (students)</label>
-                        <input id="capacity" name="capacity" type="number" class="form-control" min="1" max="6" value="1" required>
+                        <input id="capacity" name="capacity" type="number" class="form-control" min="1" max="6" value="{{ values.capacity }}" required>
                     </div>
                     <div class="col-sm-6">
                         <label for="bathroom" class="form-label">Bathroom</label>
                         <select id="bathroom" name="bathroom" class="form-select">
-                            <option value="">Not recorded</option>
-                            <option value="en-suite">En-suite (in the room)</option>
-                            <option value="hallway">Shared hallway bathroom</option>
-                            <option value="shared-suite">Shared with the suite</option>
+                            {% for value, label in [("", "Not recorded"), ("en-suite", "En-suite (in the room)"),
+                                                     ("hallway", "Shared hallway bathroom"), ("shared-suite", "Shared with the suite")] %}
+                                <option value="{{ value }}" {% if values.bathroom == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
                         </select>
                     </div>
                 </div>
@@ -137,18 +166,29 @@
                 <div class="row g-3 mb-3">
                     <div class="col-sm-6">
                         <label for="measured_by" class="form-label">Measured by</label>
-                        <input id="measured_by" name="measured_by" class="form-control" maxlength="60">
+                        <input id="measured_by" name="measured_by" class="form-control" maxlength="60" value="{{ values.measured_by }}">
                     </div>
                     <div class="col-sm-6">
                         <label for="measured_on" class="form-label">Measured on</label>
-                        <input id="measured_on" name="measured_on" type="date" class="form-control">
+                        <input id="measured_on" name="measured_on" type="date" class="form-control" value="{{ values.measured_on }}">
                     </div>
                     <div class="col-12">
                         <label for="notes" class="form-label">Notes</label>
-                        <textarea id="notes" name="notes" class="form-control" rows="2" maxlength="500"></textarea>
+                        <textarea id="notes" name="notes" class="form-control" rows="2" maxlength="500">{{ values.notes }}</textarea>
                     </div>
                 </div>
-                <p class="small text-body-secondary">Saving is added in milestone A4.</p>
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <button type="submit" class="btn btn-crimson">{{ "Save changes" if room_type else "Save draft" }}</button>
+                    {% if room_type %}
+                        {# Admins can open drafts in the planner (SPEC.md 9.1). #}
+                        <a class="btn btn-outline-secondary" href="{{ url_for('pages.plan', type_id=room_type.id) }}"
+                           target="_blank" rel="noopener">Preview in 3D</a>
+                    {% endif %}
+                </div>
+                {# Shown by main.js if Save is pressed while the preview lists problems. #}
+                <p id="save-blocked" class="text-danger small mt-2" role="alert" hidden>
+                    Fix the problems listed under the preview before saving.
+                </p>
             </div>
 
             <div class="col-lg-5">
@@ -165,6 +205,25 @@
             </div>
         </div>
     </form>
+
+    {% if room_type %}
+        {# Separate small forms, because forms can't be nested inside the builder form. #}
+        <div class="card narrow-card mt-4">
+            <div class="card-body">
+                {% if room_type.status == "published" %}
+                    <p class="mb-2">Students can find and open this room type.</p>
+                    <form action="{{ url_for('admin.unpublish_room_type', type_id=room_type.id) }}" method="post">
+                        <button type="submit" class="btn btn-outline-secondary">Unpublish (back to draft)</button>
+                    </form>
+                {% else %}
+                    <p class="mb-2">Only admins can see this draft. Publishing uses the last <em>saved</em> version.</p>
+                    <form action="{{ url_for('admin.publish_room_type', type_id=room_type.id) }}" method="post">
+                        <button type="submit" class="btn btn-success">Publish</button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
 
     {# A <template> is HTML the browser keeps but doesn't show. main.js clones
        it for each wall row, so the row's markup lives here, not in JavaScript. #}

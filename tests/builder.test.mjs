@@ -9,6 +9,7 @@ import {
   buildGeometry,
   featureFromValues,
   featureProblems,
+  geometryToForm,
   outlineFromWalls,
   parseInches,
   rectangleOutline,
@@ -260,4 +261,32 @@ test("featureRect: a door's zone on the south wall, measured from its left corne
 test("featureRect on the west wall reaches east into the room", () => {
   const closet = { kind: "closet", wall: 3, offset: 30, width: 60, height: 84 };
   assert.deepEqual(featureRect(RECT_114, closet, 24), [[0, 120], [0, 60], [24, 60], [24, 120]]);
+});
+
+// --- geometryToForm (A4) ----------------------------------------------------------
+
+test("a saved rectangle opens in Rectangle mode", () => {
+  const door = { kind: "door", wall: 2, offset: 10, width: 34, height: 80 };
+  const form = geometryToForm({ ceiling: 102, outline: rectangleOutline(114, 150), features: [door] });
+  assert.equal(form.shape, "rectangle");
+  assert.equal(form.width, 114);
+  assert.equal(form.length, 150);
+  assert.deepEqual(form.features, [door]);
+});
+
+test("a saved L-shape opens as walked walls that rebuild the same outline", () => {
+  const form = geometryToForm({ ceiling: 96, outline: L_OUTLINE, features: [] });
+  assert.equal(form.shape, "walls");
+  assert.deepEqual(form.walls, L_WALLS);
+  assert.deepEqual(outlineFromWalls(form.walls).outline, L_OUTLINE);   // round trip
+});
+
+test("a rectangle not starting at the north-west corner opens as walls", () => {
+  const form = geometryToForm({ ceiling: 96, outline: [[114, 0], [114, 150], [0, 150], [0, 0]], features: [] });
+  assert.equal(form.shape, "walls");
+  assert.deepEqual(form.walls.map((w) => w.direction), ["south", "west", "north", "east"]);
+});
+
+test("a room with an angled wall can't be shown in the form", () => {
+  assert.equal(geometryToForm({ ceiling: 96, outline: [[0, 0], [100, 0], [0, 100]], features: [] }), null);
 });

@@ -155,3 +155,165 @@ def test_bad_dorm_keeps_what_was_typed(client):
     log_in(client, "admin")
     page = client.post("/admin/dorms", data={"name": "", "yard": "River"}).get_data(as_text=True)
     assert 'value="River"' in page
+
+
+# --- A4: save, edit, publish ---------------------------------------------------
+
+import json  # noqa: E402  (grouped with the A4 tests that use it)
+
+L_ROOM = {
+    "version": 1, "units": "in", "ceiling": 96,
+    "outline": [[0, 0], [120, 0], [120, 60], [60, 60], [60, 150], [0, 150]],
+    "features": [{"kind": "door", "wall": 3, "offset": 20, "width": 30, "height": 80}],
+}
+
+
+def demo_hall_id():
+    return db.execute("SELECT id FROM dorms WHERE name = 'Demo Hall'")[0]["id"]
+
+
+def builder_form(**changes):
+    """A valid builder form submission, with some fields replaced."""
+    form = {
+        "dorm_id": str(demo_hall_id()), "name": "L-shaped single", "capacity": "1",
+        "bathroom": "hallway", "measured_by": "Test Admin", "measured_on": "2026-09-01",
+        "notes": "", "geometry": json.dumps(L_ROOM),
+    }
+    form.update(changes)
+    return form
+
+
+def admin_client(client):
+    log_in(client, "admin")
+    return client
+
+
+def test_save_new_room_type_as_draft(client):
+    response = admin_client(client).post("/admin/types/new", data=builder_form())
+    assert response.status_code == 302
+    row = db.execute("SELECT * FROM room_types WHERE name = 'L-shaped single'")[0]
+    assert response.headers["Location"] == f"/admin/types/{row['id']}/edit"
+    assert row["status"] == "draft"
+    assert row["bathroom"] == "hallway" and row["measured_on"] == "2026-09-01"
+    assert json.loads(row["geometry"]) == L_ROOM
+    admin_id = db.execute("SELECT id FROM users WHERE role = 'admin'")[0]["id"]
+    assert row["created_by"] == admin_id
+    assert "Saved draft" in client.get(response.headers["Location"]).get_data(as_text=True)
+
+
+def test_saved_draft_opens_in_the_planner_for_admins_only(client):
+    admin_client(client).post("/admin/types/new", data=builder_form())
+    type_id = db.execute("SELECT id FROM room_types WHERE name = 'L-shaped single'")[0]["id"]
+    assert client.get(f"/plan/{type_id}").status_code == 200
+    assert client.get(f"/api/types/{type_id}").get_json()["geometry"] == L_ROOM
+    client.get("/logout")
+    assert client.get(f"/plan/{type_id}").status_code == 404
+
+
+def test_server_rejects_window_wider_than_wall_with_readable_message(client):
+    room = dict(L_ROOM, features=[{"kind": "window", "wall": 1, "offset": 0, "width": 80, "height": 50, "sill": 30}])
+    response = admin_client(client).post("/admin/types/new", data=builder_form(geometry=json.dumps(room)))
+    assert response.status_code == 400
+    page = response.get_data(as_text=True)
+    assert "Window 1 is wider than wall B (80 in on a 60 in wall)." in page
+    assert 'value="L-shaped single"' in page               # what was typed is kept
+    assert "data-geometry=" in page and "&#34;window&#34;" in page   # and so is the shape
+    assert db.execute("SELECT COUNT(*) AS n FROM room_types")[0]["n"] == 2
+
+
+@pytest.mark.parametrize("changes, message", [
+    ({"name": ""}, "name of 1 to 60 characters"),
+    ({"name": "x" * 61}, "name of 1 to 60 characters"),
+    ({"capacity": "0"}, "Capacity must be"),
+    ({"capacity": "seven"}, "Capacity must be"),
+    ({"dorm_id": "999"}, "Pick a dorm"),
+    ({"bathroom": "outdoor"}, "bathroom option"),
+    ({"measured_on": "2026-02-30"}, "real date"),
+    ({"notes": "n" * 501}, "at most 500"),
+    ({"geometry": ""}, "shape is missing"),
+    ({"geometry": "{not json"}, "couldn&#39;t be read"),   # Jinja escapes the apostrophe
+    ({"geometry": json.dumps(dict(L_ROOM, ceiling=500))}, "Ceiling"),
+])
+def test_save_validates_every_field(client, changes, message):
+    response = admin_client(client).post("/admin/types/new", data=builder_form(**changes))
+    assert response.status_code == 400
+    assert message in response.get_data(as_text=True)
+
+
+def test_duplicate_name_in_the_same_dorm(client):
+    response = admin_client(client).post("/admin/types/new", data=builder_form(name="Single (sample)"))
+    assert response.status_code == 400
+    assert "Demo Hall already has a room type called Single (sample)." in response.get_data(as_text=True)
+
+
+def test_edit_page_is_filled_from_the_database(client):
+    single = db.execute("SELECT id FROM room_types WHERE name = 'Single (sample)'")[0]["id"]
+    page = admin_client(client).get(f"/admin/types/{single}/edit").get_data(as_text=True)
+    assert 'value="Single (sample)"' in page
+    assert 'value="hallway" selected' in page
+    assert "data-geometry=" in page and "&#34;outline&#34;" in page
+    assert "This room type is published" in page          # warning before editing live rooms
+    assert f'href="/plan/{single}"' in page                # Preview in 3D
+    assert "Unpublish" in page
+
+
+def test_edit_saves_changes(client):
+    single = db.execute("SELECT id FROM room_types WHERE name = 'Single (sample)'")[0]["id"]
+    response = admin_client(client).post(f"/admin/types/{single}/edit", data=builder_form(name="Single, renamed"))
+    assert response.status_code == 302
+    row = db.execute("SELECT name, status, geometry FROM room_types WHERE id = ?", single)[0]
+    assert row["name"] == "Single, renamed"
+    assert row["status"] == "published"                    # editing doesn't unpublish
+    assert json.loads(row["geometry"]) == L_ROOM
+
+
+def test_edit_missing_room_type_is_404(client):
+    assert admin_client(client).get("/admin/types/9999/edit").status_code == 404
+
+
+def test_publish_and_unpublish(client):
+    admin_client(client).post("/admin/types/new", data=builder_form())
+    type_id = db.execute("SELECT id FROM room_types WHERE name = 'L-shaped single'")[0]["id"]
+
+    response = client.post(f"/admin/types/{type_id}/publish")
+    assert response.status_code == 302
+    assert db.execute("SELECT status FROM room_types WHERE id = ?", type_id)[0]["status"] == "published"
+    client.get("/logout")
+    assert client.get(f"/types/{type_id}").status_code == 200   # students can see it now
+
+    admin_id = db.execute("SELECT id FROM users WHERE role = 'admin'")[0]["id"]
+    with client.session_transaction() as session:   # log the same admin back in
+        session["user_id"] = admin_id
+    client.post(f"/admin/types/{type_id}/unpublish")
+    assert db.execute("SELECT status FROM room_types WHERE id = ?", type_id)[0]["status"] == "draft"
+
+
+def test_publish_refuses_an_invalid_saved_room(client):
+    bad = dict(L_ROOM, ceiling=10)
+    type_id = db.execute(
+        "INSERT INTO room_types (dorm_id, name, geometry) VALUES (?, 'Broken', ?)",
+        demo_hall_id(), json.dumps(bad),
+    )
+    admin_client(client).post(f"/admin/types/{type_id}/publish")
+    assert db.execute("SELECT status FROM room_types WHERE id = ?", type_id)[0]["status"] == "draft"
+    assert "Can&#39;t publish Broken yet" in client.get(f"/admin/types/{type_id}/edit").get_data(as_text=True)
+
+
+def test_room_types_list_has_edit_3d_and_publish_buttons(client):
+    page = admin_client(client).get("/admin/types").get_data(as_text=True)
+    single = db.execute("SELECT id FROM room_types WHERE name = 'Single (sample)'")[0]["id"]
+    assert f'href="/admin/types/{single}/edit"' in page
+    assert f'href="/plan/{single}"' in page
+    assert f'action="/admin/types/{single}/unpublish"' in page
+
+
+def test_duplicate_name_is_reported_with_other_problems(client):
+    response = admin_client(client).post("/admin/types/new", data=builder_form(name="Single (sample)", capacity="9"))
+    page = response.get_data(as_text=True)
+    assert "Capacity must be" in page and "already has a room type called Single (sample)" in page
+
+
+def test_editing_keeps_its_own_name(client):
+    single = db.execute("SELECT id FROM room_types WHERE name = 'Single (sample)'")[0]["id"]
+    response = admin_client(client).post(f"/admin/types/{single}/edit", data=builder_form(name="Single (sample)"))
+    assert response.status_code == 302

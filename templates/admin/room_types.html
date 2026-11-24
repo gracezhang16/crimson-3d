@@ -46,9 +46,15 @@
                             <td class="text-end">{{ type.room_count }}</td>
                             <td>{{ type.updated[:16] if type.updated else "" }}</td>
                             <td class="text-end text-nowrap">
-                                {# Edit and Publish buttons arrive in A4. The facts page has
-                                   an "Open in 3D" button. #}
-                                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('pages.room_type', type_id=type.id) }}">View</a>
+                                <a class="btn btn-sm btn-crimson" href="{{ url_for('admin.edit_room_type', type_id=type.id) }}">Edit</a>
+                                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('pages.plan', type_id=type.id) }}">3D</a>
+                                {# A button that changes data must POST, so each is a tiny form. #}
+                                <form class="d-inline" method="post"
+                                      action="{{ url_for('admin.unpublish_room_type' if type.status == 'published' else 'admin.publish_room_type', type_id=type.id) }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary">
+                                        {{ "Unpublish" if type.status == "published" else "Publish" }}
+                                    </button>
+                                </form>
                             </td>
                         </tr>
                     {% endfor %}

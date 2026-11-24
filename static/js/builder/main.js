@@ -13,7 +13,9 @@
 import { formatFeetInches } from "../shared/units.js";
 import { wallLetter } from "../shared/geometry.js";
 import { drawPreview } from "./preview.js";
-import { buildGeometry, featureFromValues, parseInches, rectangleWalls, wallProblem } from "./state.js";
+import {
+  buildGeometry, featureFromValues, geometryToForm, parseInches, rectangleWalls, wallProblem,
+} from "./state.js";
 
 // Which number boxes each kind of feature uses (SPEC.md 4.2); the rest are
 // disabled. Offset is always used.
@@ -34,6 +36,7 @@ const wallRows = document.querySelector("#wall-rows");
 const rowTemplate = document.querySelector("#wall-row-template");
 const featuresTable = document.querySelector("#features-table");
 const featureTemplate = document.querySelector("#feature-template");
+const saveBlocked = document.querySelector("#save-blocked");
 
 /**
  * @returns {{direction: string, length: number}[]} the wall table, row by row
@@ -131,10 +134,13 @@ function refreshFeatures(wallCount, featureErrors) {
       select.value = chosen;
     }
 
-    const used = FEATURE_FIELDS[body.querySelector(".feature-kind").value];
+    const kind = body.querySelector(".feature-kind").value;
+    const used = FEATURE_FIELDS[kind];
     for (const input of body.querySelectorAll("[data-field]")) {
       input.disabled = input.dataset.field !== "offset" && !used.includes(input.dataset.field);
     }
+    // A radiator's height is optional; hint at the default the planner uses.
+    body.querySelector('[data-field="height"]').placeholder = kind === "radiator" ? "24" : "80";
 
     const problems = featureErrors[i] ?? [];
     body.querySelector(".feature-inputs").classList.toggle("table-danger", problems.length > 0);
@@ -259,7 +265,57 @@ form.addEventListener("click", (event) => {
     update();
   }
 });
-// Don't let Enter submit the form until saving exists (A4).
-form.addEventListener("submit", (event) => event.preventDefault());
+// Only submit a room the preview accepts; the server checks it again anyway.
+form.addEventListener("submit", (event) => {
+  update();
+  const blocked = field("geometry").value === "";
+  saveBlocked.hidden = !blocked;
+  if (blocked) {
+    event.preventDefault();
+  }
+});
 
+/**
+ * Fill the shape, ceiling and features from a saved room (editing, or the
+ * server sending the form back with errors).
+ *
+ * @param {object} geometry - the room format
+ * @returns {boolean} false if the room can't be shown in the form
+ */
+function loadGeometry(geometry) {
+  const saved = geometryToForm(geometry);
+  if (!saved) {
+    return false;
+  }
+  field("ceiling").value = saved.ceiling;
+  if (saved.shape === "rectangle") {
+    field("width").value = saved.width;
+    field("length").value = saved.length;
+  } else {
+    saved.walls.forEach((wall) => addWallRow(wall.direction, wall.length));
+  }
+  document.querySelector(`#shape-${saved.shape}`).checked = true;
+
+  saved.features.forEach(addFeature);
+  // Build each feature's wall list before choosing its wall.
+  refreshFeatures(saved.walls.length, []);
+  featureBodies().forEach((body, i) => {
+    const feature = saved.features[i];
+    body.querySelector(".feature-kind").value = feature.kind;
+    body.querySelector(".feature-wall").value = feature.wall;
+    for (const input of body.querySelectorAll("[data-field]")) {
+      input.value = feature[input.dataset.field] ?? "";
+    }
+  });
+  return true;
+}
+
+if (form.dataset.geometry && !loadGeometry(JSON.parse(form.dataset.geometry))) {
+  // The form would fall back to a default rectangle, and saving that would
+  // overwrite the real shape. So saving is switched off for this room.
+  form.querySelector('button[type="submit"]').disabled = true;
+  saveBlocked.textContent = "This room has angled walls, which the builder can't edit yet, "
+    + "so saving is turned off to keep its shape safe.";
+  saveBlocked.hidden = false;
+}
 setShape(field("shape").value);

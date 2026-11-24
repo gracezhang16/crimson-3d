@@ -185,3 +185,25 @@ Technical choices:
 - **Only door zones are tinted for now** (SPEC.md 4.3 asks for that one). Closet and radiator zones are computed and will matter in P7.
 - **No door-swing arcs**: the room format has no hinge side, so neither the planner nor the builder draws one. Adding a hinge would change SPEC.md 4 and needs all three teammates.
 - **Checked with a scratch "Feature test" room** (door, window, radiator and outlet on the north wall, closet on the west wall), because both sample rooms put their door on the south wall, which is a stub from the default view.
+
+## 2026-11-24 (dev branch)
+
+- **`planner` and `admin` were merged into one shared branch, `dev`**, before A4, because A4's "done when" (a room built in the form opens in the planner) needs both tracks. Work continues on `dev`, one commit per milestone, so each teammate can still review their own commits. The merge was clean (the `.gitattributes` union driver handled `decisions.md`).
+
+## 2026-11-24 (A4, built for Hannah with the team's agreement)
+
+Product choices confirmed by Grace:
+
+- **Editing a published room type keeps it published**; changes go live on save, and the edit page warns about that. Alternative: every edit sends it back to draft.
+- **After saving, the admin stays on the edit page** with a "Saved draft" / "Saved changes" message. Alternative: go back to the room types list.
+
+Technical choices:
+
+- **The server checks everything again** (`read_room_type_form`): dorm exists, name 1–60 and unique in the dorm, capacity 1–6, bathroom from the list, a real date, notes ≤ 500, and the geometry through `validate_room()`. Errors re-show the form with what was typed, the shape included, as a list of readable messages (SPEC.md 7.3).
+- **The browser won't submit while the preview lists problems** ("Fix the problems listed under the preview before saving"). So the hidden `geometry` field only ever carries a shape the page accepted, and when the server finds a problem (e.g. a self-crossing walk, or a bad capacity) the shape comes back intact. If JavaScript is off, the field is empty and the server says the shape is missing.
+- **Duplicate names are checked up front** so they're listed with other problems; the `UNIQUE (dorm_id, name)` constraint still catches two saves arriving at the same moment.
+- **Saved rooms reach the page through `data-geometry`** on the form (no inline script data, SPEC.md 11). `builder/state.js: geometryToForm` turns them back into form values: a rectangle starting at (0, 0) opens as Rectangle; any other right-angled outline opens as walked walls from its first corner (round trip tested).
+- **Rooms with angled walls can't be shown in the form, so saving is turned off for them**, with an explanation. Otherwise the form would fall back to a default rectangle and Save would overwrite the real shape. No such rooms exist yet.
+- **Publish re-validates the saved geometry** and refuses with the first problem if it fails (SPEC.md 7.3). Publish and Unpublish are small POST forms outside the builder form, because forms can't be nested, and they act on the last *saved* version (the page says so).
+- **Preview in 3D opens `/plan/<id>` in a new tab**, which admins can see for drafts.
+- **A radiator's height placeholder says 24** (the default height), not a door's 80.

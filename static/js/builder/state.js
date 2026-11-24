@@ -376,3 +376,44 @@ export function buildGeometry({ shape, width, length, walls, ceiling, features =
   const geometry = outline && { version: 1, units: "in", ceiling, outline, features };
   return { geometry, errors, openEnd, featureErrors };
 }
+
+// ---------------------------------------------------------------------------
+// Saved room -> form (A4): used when editing, and when the server sends the
+// form back with errors.
+// ---------------------------------------------------------------------------
+
+/**
+ * Turn a room-format object back into the values the form shows.
+ *
+ * A plain rectangle starting at (0, 0) opens in Rectangle mode. Any other
+ * outline whose walls all run north, south, east or west opens as walked
+ * walls, starting from its first corner. Angled walls can't be shown in
+ * either mode, so those return null.
+ *
+ * @param {{ceiling: number, outline: number[][], features: object[]}} geometry
+ * @returns {{shape: "rectangle" | "walls", width?: number, length?: number,
+ *   walls: {direction: string, length: number}[], ceiling: number,
+ *   features: object[]} | null}
+ */
+export function geometryToForm(geometry) {
+  const { outline, ceiling, features } = geometry;
+  const [width, length] = [outline[1]?.[0], outline[2]?.[1]];
+  const isRectangle = outline.length === 4 &&
+    JSON.stringify(outline) === JSON.stringify(rectangleOutline(width, length));
+  if (isRectangle) {
+    return { shape: "rectangle", width, length, walls: rectangleWalls(width, length), ceiling, features };
+  }
+
+  const walls = [];
+  for (let i = 0; i < outline.length; i++) {
+    const [x1, y1] = outline[i];
+    const [x2, y2] = outline[(i + 1) % outline.length];
+    const [dx, dy] = [x2 - x1, y2 - y1];
+    if (dx !== 0 && dy !== 0) {
+      return null; // an angled wall
+    }
+    const direction = dx > 0 ? "east" : dx < 0 ? "west" : dy > 0 ? "south" : "north";
+    walls.push({ direction, length: Math.abs(dx + dy) });
+  }
+  return { shape: "walls", walls, ceiling, features };
+}

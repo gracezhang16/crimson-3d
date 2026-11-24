@@ -6,9 +6,13 @@ logged-in admin gets a 403 page. tests/test_admin.py checks this for every
 /admin route automatically, including ones added later.
 """
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+import json
+from datetime import date
 
-from helpers import admin_required, db
+from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+
+from geometry import validate_room
+from helpers import admin_required, apology, db
 
 admin = Blueprint("admin", __name__)
 
@@ -16,6 +20,13 @@ admin = Blueprint("admin", __name__)
 MAX_DORM_NAME = 60
 MAX_YARD = 60
 MAX_DESCRIPTION = 500
+
+# Room type fields (SPEC.md 5 and 9.1). Lengths are ours; the spec gives none.
+ROOM_TYPE_FIELDS = ("dorm_id", "name", "capacity", "bathroom", "measured_by", "measured_on", "notes")
+BATHROOMS = ("en-suite", "hallway", "shared-suite")
+MAX_TYPE_NAME = 60
+MAX_MEASURED_BY = 60
+MAX_NOTES = 500
 
 
 def count(sql, *args):
@@ -56,16 +67,196 @@ def room_types():
     return render_template("admin/room_types.html", types=types)
 
 
-@admin.route("/types/new")
+# ---------------------------------------------------------------------------
+# Room builder: new, edit, publish (SPEC.md 7.3, 9.1)
+# ---------------------------------------------------------------------------
+
+def read_room_type_form(form, type_id=None):
+    """Read and check the builder form. `type_id` is the room type being
+    edited (so its own name doesn't count as a duplicate), or None.
+
+    Returns (values, geometry_text, geometry, errors): the trimmed text
+    fields (to show again if there are errors), the raw geometry JSON, the
+    parsed geometry (or None), and a list of problems written for a person.
+    The geometry is checked with geometry.validate_room(), the same rules the
+    builder's preview applies, because a browser can always be bypassed.
+    """
+    values = {field: (form.get(field) or "").strip() for field in ROOM_TYPE_FIELDS}
+    geometry_text = (form.get("geometry") or "").strip()
+    errors = []
+
+    if not values["dorm_id"].isdigit() or not db.execute(
+        "SELECT id FROM dorms WHERE id = ?", int(values["dorm_id"])
+    ):
+        errors.append("Pick a dorm.")
+    if not 1 <= len(values["name"]) <= MAX_TYPE_NAME:
+        errors.append(f"Give the room type a name of 1 to {MAX_TYPE_NAME} characters.")
+    elif not errors and db.execute(
+        "SELECT id FROM room_types WHERE dorm_id = ? AND name = ? AND id != ?",
+        int(values["dorm_id"]), values["name"], type_id or 0,
+    ):
+        # Checked here so every problem shows at once; the UNIQUE constraint
+        # still catches two saves arriving at the same moment.
+        errors.append(duplicate_name_error(values))
+    if not values["capacity"].isdigit() or not 1 <= int(values["capacity"]) <= 6:
+        errors.append("Capacity must be a whole number from 1 to 6.")
+    if values["bathroom"] and values["bathroom"] not in BATHROOMS:
+        errors.append("Pick a bathroom option from the list.")
+    if len(values["measured_by"]) > MAX_MEASURED_BY:
+        errors.append(f"Measured by can be at most {MAX_MEASURED_BY} characters.")
+    if values["measured_on"] and not is_iso_date(values["measured_on"]):
+        errors.append("Measured on must be a real date.")
+    if len(values["notes"]) > MAX_NOTES:
+        errors.append(f"Notes can be at most {MAX_NOTES} characters.")
+
+    geometry = None
+    if not geometry_text:
+        errors.append("The room's shape is missing. Fix the problems shown under the preview.")
+    else:
+        try:
+            geometry = json.loads(geometry_text)
+        except ValueError:
+            errors.append("The room's shape couldn't be read. Reload the page and try again.")
+        else:
+            errors.extend(validate_room(geometry))
+    return values, geometry_text, geometry, errors
+
+
+def is_iso_date(text):
+    """True if text is a real date written as YYYY-MM-DD (what <input type=date> sends)."""
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        return False
+    return True
+
+
+def room_type_params(values, geometry):
+    """The column values to store, in ROOM_TYPE_FIELDS order plus geometry."""
+    return (
+        int(values["dorm_id"]), values["name"], int(values["capacity"]),
+        values["bathroom"] or None, values["measured_by"] or None,
+        values["measured_on"] or None, values["notes"] or None,
+        json.dumps(geometry),
+    )
+
+
+def duplicate_name_error(values):
+    """The message for a name already used in that dorm (UNIQUE (dorm_id, name))."""
+    dorm = db.execute("SELECT name FROM dorms WHERE id = ?", int(values["dorm_id"]))[0]["name"]
+    return f"{dorm} already has a room type called {values['name']}."
+
+
+def render_builder(room_type, values, geometry_text, errors=(), status=200):
+    """Show the builder form, empty, filled from the database, or re-filled after errors."""
+    dorms = db.execute("SELECT id, name FROM dorms ORDER BY name")
+    return render_template(
+        "admin/room_type_form.html", dorms=dorms, room_type=room_type,
+        values=values, geometry_text=geometry_text, errors=errors,
+    ), status
+
+
+def find_room_type(type_id):
+    """Return the room_types row with this id, or None."""
+    rows = db.execute("SELECT * FROM room_types WHERE id = ?", type_id)
+    return rows[0] if rows else None
+
+
+@admin.route("/types/new", methods=["GET", "POST"])
 @admin_required
 def new_room_type():
-    """The room builder form, empty (SPEC.md 9.1).
+    """The empty builder form; on POST, save it as a new draft room type.
 
     builder/main.js draws the live preview and fills the hidden "geometry"
-    field. Saving (POST) arrives in A4, the features table in A3.
+    field; the browser won't submit while the preview shows problems.
     """
-    dorms = db.execute("SELECT id, name FROM dorms ORDER BY name")
-    return render_template("admin/room_type_form.html", dorms=dorms)
+    if request.method == "GET":
+        values = dict.fromkeys(ROOM_TYPE_FIELDS, "") | {"capacity": "1"}
+        return render_builder(None, values, "")
+
+    values, geometry_text, geometry, errors = read_room_type_form(request.form)
+    if not errors:
+        try:
+            type_id = db.execute(
+                "INSERT INTO room_types (dorm_id, name, capacity, bathroom, measured_by, "
+                "measured_on, notes, geometry, status, created_by) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)",
+                *room_type_params(values, geometry), session["user_id"],
+            )
+        except ValueError:  # UNIQUE (dorm_id, name) failed
+            errors.append(duplicate_name_error(values))
+        else:
+            flash("Saved draft. Use Preview in 3D to check it, then Publish.")
+            return redirect(url_for("admin.edit_room_type", type_id=type_id))
+    return render_builder(None, values, geometry_text, errors, 400)
+
+
+@admin.route("/types/<int:type_id>/edit", methods=["GET", "POST"])
+@admin_required
+def edit_room_type(type_id):
+    """The builder form filled in from the database; on POST, save the changes.
+
+    A published room type stays published, so saved changes go live at once
+    (the page warns about this).
+    """
+    room_type = find_room_type(type_id)
+    if room_type is None:
+        return apology("We couldn't find that room type.", 404)
+
+    if request.method == "GET":
+        values = {field: "" if room_type[field] is None else str(room_type[field])
+                  for field in ROOM_TYPE_FIELDS}
+        return render_builder(room_type, values, room_type["geometry"])
+
+    values, geometry_text, geometry, errors = read_room_type_form(request.form, type_id)
+    if not errors:
+        try:
+            db.execute(
+                "UPDATE room_types SET dorm_id = ?, name = ?, capacity = ?, bathroom = ?, "
+                "measured_by = ?, measured_on = ?, notes = ?, geometry = ?, "
+                "updated = CURRENT_TIMESTAMP WHERE id = ?",
+                *room_type_params(values, geometry), type_id,
+            )
+        except ValueError:  # UNIQUE (dorm_id, name) failed
+            errors.append(duplicate_name_error(values))
+        else:
+            flash("Saved changes." + (" Students see them now." if room_type["status"] == "published" else ""))
+            return redirect(url_for("admin.edit_room_type", type_id=type_id))
+    return render_builder(room_type, values, geometry_text, errors, 400)
+
+
+@admin.route("/types/<int:type_id>/publish", methods=["POST"])
+@admin_required
+def publish_room_type(type_id):
+    """Publish a room type, but only if its saved geometry is valid (SPEC.md 7.3)."""
+    room_type = find_room_type(type_id)
+    if room_type is None:
+        return apology("We couldn't find that room type.", 404)
+    errors = validate_room(json.loads(room_type["geometry"]))
+    if errors:
+        flash(f"Can't publish {room_type['name']} yet: {errors[0]}")
+    else:
+        db.execute(
+            "UPDATE room_types SET status = 'published', updated = CURRENT_TIMESTAMP WHERE id = ?",
+            type_id,
+        )
+        flash(f"Published {room_type['name']}. Students can now find it.")
+    return redirect(url_for("admin.edit_room_type", type_id=type_id))
+
+
+@admin.route("/types/<int:type_id>/unpublish", methods=["POST"])
+@admin_required
+def unpublish_room_type(type_id):
+    """Put a room type back to draft, hiding it (and its layouts) from students."""
+    room_type = find_room_type(type_id)
+    if room_type is None:
+        return apology("We couldn't find that room type.", 404)
+    db.execute(
+        "UPDATE room_types SET status = 'draft', updated = CURRENT_TIMESTAMP WHERE id = ?",
+        type_id,
+    )
+    flash(f"{room_type['name']} is a draft again. Only admins can see it.")
+    return redirect(url_for("admin.edit_room_type", type_id=type_id))
 
 
 @admin.route("/dorms", methods=["GET", "POST"])
