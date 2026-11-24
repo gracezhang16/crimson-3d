@@ -1,12 +1,14 @@
 /**
- * Planner entry point (SPEC.md 8.1): read the page's data-* attributes, build
- * the scene and wire the modules together.
+ * Planner entry point (SPEC.md 8.1): read the page's data-* attributes, load
+ * the room, build the scene and wire the modules together.
  *
- * P1: shows a test box the size of the bed on a 1 ft grid, to prove the
- * scene, camera and controls work. P2 replaces it with the real room.
+ * P2: the room's floor, walls (with dollhouse stubs) and wall labels, loaded
+ * from /api/types/<id>. Furniture arrives in P4.
  */
 
-import * as THREE from "three";
+import { apiFetch } from "../shared/api.js";
+import { createWallLabels } from "./labels.js";
+import { buildRoom } from "./room.js";
 import { createScene, webglAvailable } from "./scene.js";
 
 const NO_WEBGL_MESSAGE =
@@ -30,57 +32,59 @@ function readConfig(element) {
 }
 
 /**
- * Replace the canvas with a message (SPEC.md 8.8).
+ * Show a message over the 3D area, e.g. when WebGL or loading fails
+ * (SPEC.md 8.8). Removes the canvas, since there's nothing to draw.
  *
  * @param {HTMLCanvasElement} canvas
+ * @param {string} text
  */
-function showNoWebgl(canvas) {
+function showMessage(canvas, text) {
   const message = document.createElement("div");
   message.className = "planner-message";
   message.setAttribute("role", "alert");
-  message.textContent = NO_WEBGL_MESSAGE;
+  message.textContent = text;
   canvas.replaceWith(message);
 }
 
 /**
- * P1 placeholder: a box the size of the twin XL bed (40 × 84 × 36 in) on a
- * floor grid with a line every 12 in.
+ * Load the room type and draw it.
  *
- * @returns {THREE.Group}
+ * @param {HTMLCanvasElement} canvas
+ * @param {{typeId: number}} config
  */
-function makeTestScene() {
-  const group = new THREE.Group();
+async function start(canvas, config) {
+  let roomType;
+  try {
+    roomType = await apiFetch(`/api/types/${config.typeId}`);
+  } catch (error) {
+    showMessage(canvas, `Couldn't load this room: ${error.message}`);
+    return;
+  }
 
-  // BoxGeometry is centred on its origin, so lift it by half its height to
-  // stand it on the floor (y = 0).
-  const box = new THREE.Mesh(
-    new THREE.BoxGeometry(40, 36, 84),
-    new THREE.MeshStandardMaterial({ color: 0xb8875a }),
-  );
-  box.position.y = 18;
-  group.add(box);
+  const container = canvas.parentElement;
+  const view = createScene(canvas);
+  const room = buildRoom(roomType.geometry);
+  view.scene.add(room.group);
 
-  // GridHelper(size, divisions): 120 in across, 10 divisions = one per foot.
-  group.add(new THREE.GridHelper(120, 10, 0x8a8f99, 0xc4c9d1));
-  return group;
+  const labels = createWallLabels(container, room.walls);
+  // Order matters: the room decides which walls are stubs, then the labels
+  // pick from the walls still standing.
+  view.addFrameCallback((camera) => {
+    room.update(camera);
+    labels.update(camera);
+  });
+  view.fitCamera(room.bounds);
 }
 
 const plannerElement = document.querySelector("#planner");
 const canvas = document.querySelector("#scene");
-// Used from P4 on, to load the room (config.typeId) and saved layouts.
-const config = readConfig(plannerElement); // eslint-disable-line no-unused-vars
 
 if (!webglAvailable()) {
-  showNoWebgl(canvas);
+  showMessage(canvas, NO_WEBGL_MESSAGE);
 } else {
-  try {
-    const view = createScene(canvas);
-    const testScene = makeTestScene();
-    view.scene.add(testScene);
-    view.fitCamera(new THREE.Box3().setFromObject(testScene));
-  } catch (error) {
+  start(canvas, readConfig(plannerElement)).catch((error) => {
     // Creating the renderer can still fail (e.g. the graphics driver refuses).
     console.error(error);
-    showNoWebgl(canvas);
-  }
+    showMessage(canvas, NO_WEBGL_MESSAGE);
+  });
 }

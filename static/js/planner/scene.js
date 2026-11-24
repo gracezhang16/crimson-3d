@@ -49,7 +49,8 @@ export function webglAvailable() {
  * @param {HTMLCanvasElement} canvas - must sit inside a sized container
  * @returns {{scene: THREE.Scene, camera: THREE.PerspectiveCamera,
  *   renderer: THREE.WebGLRenderer, controls: OrbitControls,
- *   requestRender: () => void, fitCamera: (box: THREE.Box3) => void}}
+ *   requestRender: () => void, fitCamera: (box: THREE.Box3) => void,
+ *   addFrameCallback: (callback: (camera: THREE.Camera) => void) => void}}
  */
 export function createScene(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -63,6 +64,19 @@ export function createScene(canvas) {
   const camera = new THREE.PerspectiveCamera(FIELD_OF_VIEW, 1, 1, 10000);
   const controls = createControls(camera, canvas);
   const panBounds = new THREE.Box3();
+
+  // Functions other modules want run just before each frame is drawn (e.g. the
+  // dollhouse walls and wall labels, which depend on where the camera is).
+  const frameCallbacks = [];
+
+  /**
+   * Run `callback(camera)` just before every frame is drawn.
+   * @param {(camera: THREE.Camera) => void} callback
+   */
+  function addFrameCallback(callback) {
+    frameCallbacks.push(callback);
+    requestRender();
+  }
 
   // --- Render on demand ------------------------------------------------------
   // Instead of redrawing 60 times a second forever, we draw a frame only when
@@ -84,6 +98,7 @@ export function createScene(canvas) {
     // frame, so frames keep coming until the motion stops on its own.
     controls.update();
     keepTargetInBounds(controls, camera, panBounds);
+    frameCallbacks.forEach((callback) => callback(camera));
     renderer.render(scene, camera);
   }
 
@@ -119,7 +134,7 @@ export function createScene(canvas) {
     const halfFov = THREE.MathUtils.degToRad(FIELD_OF_VIEW / 2);
     const distance = (radius / Math.sin(halfFov)) * 1.1;
 
-    controls.target.set(center.x, 0, center.z); // orbit around the middle of the floor
+    controls.target.copy(center); // orbit around the middle of the room, half way up
     camera.position.copy(controls.target).addScaledVector(VIEW_DIRECTION, distance);
     camera.near = distance / 100;
     camera.far = distance * 10;
@@ -127,13 +142,17 @@ export function createScene(canvas) {
 
     controls.minDistance = radius * 0.4;
     controls.maxDistance = distance * 2.5;
-    // Panning may slide the orbit centre anywhere over the floor, not beyond it.
-    panBounds.set(new THREE.Vector3(box.min.x, 0, box.min.z), new THREE.Vector3(box.max.x, 0, box.max.z));
+    // Panning may slide the orbit centre sideways anywhere over the floor, at
+    // the same height, but not beyond the room.
+    panBounds.set(
+      new THREE.Vector3(box.min.x, center.y, box.min.z),
+      new THREE.Vector3(box.max.x, center.y, box.max.z),
+    );
     controls.update();
     requestRender();
   }
 
-  return { scene, camera, renderer, controls, requestRender, fitCamera };
+  return { scene, camera, renderer, controls, requestRender, fitCamera, addFrameCallback };
 }
 
 /**

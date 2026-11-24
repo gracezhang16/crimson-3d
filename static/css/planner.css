@@ -46,6 +46,7 @@
 .planner-scene {
     position: relative;
     min-width: 0;
+    overflow: hidden;        /* wall labels near the edge are clipped, not drawn over the page */
     background: #e2e6eb;
 }
 
@@ -91,4 +92,19 @@
         border-right: 0;
         overflow-y: visible;
     }
+}
+
+/* Wall-length labels, positioned each frame by labels.js. The transform
+   centres each label above its point; pointer-events: none lets drags pass
+   through to the canvas. */
+.wall-label {
+    position: absolute;
+    transform: translate(-50%, -100%);
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgb(255 255 255 / 85%);
+    color: #2f5d8a;
+    font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace;
+    white-space: nowrap;
+    pointer-events: none;
 }

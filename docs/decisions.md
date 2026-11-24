@@ -120,3 +120,16 @@ Technical choices:
 - **`fitCamera(box)` backs the camera off until the box's bounding sphere fits in the 35° field of view** (+10%), viewing from the south-east and above so the north wall is at the back. It also sets the zoom limits and near/far planes from the room's size.
 - **The camera stops 0.05 rad above the horizon** (`maxPolarAngle`), so it can't look up from under the floor.
 - **Checked in headless Chrome** (screenshots at 1280 px and phone width). Headless Chrome won't make its window narrower than about 500 px, so the exact phone fit still needs a real browser's device mode.
+
+## 2026-11-24 (P2, built for Claire with the team's agreement)
+
+- **P2 loads the room from `/api/types/<id>`, not the static seed file** SPEC.md 10 mentions. Flask doesn't serve `seed/`, and the API (S4) already existed. Furniture from the same response is used from P4.
+- **SPEC.md 8.3 wording, to fix:** it says a wall becomes a stub when "its inward normal points toward the camera". The wall that hides the room is the one with the camera on its *outer* side, i.e. its inward normal points *away* from the camera. We implemented the intended behaviour (`roomMath.cameraOutsideWall`, tested from four viewpoints including an L-shape). The team should correct the spec sentence; it wasn't edited here.
+- **Walls are extended by their thickness only at outer (convex) corners** (`roomMath.isConvexCorner`). Extending at the inner corner of an L-shape would push the wall box into the room.
+- **Walls are built 1 unit tall and stretched with `scale.y`**, with the box's origin at its bottom, so switching between full height and a 4 in stub is a single property change per frame.
+- **Floor grid is a 64 px canvas texture repeated every 12 in.** `ShapeGeometry` uses the shape's own coordinates (inches) as texture coordinates, so `repeat = 1/12` gives one grid square per foot with no extra maths.
+- **New pure module `static/js/planner/roomMath.js`** (no three.js or DOM) holds the corner and dollhouse maths, so `node --test` covers them. `rules.js` (P7) will follow the same pattern.
+- **New shared file `static/js/shared/units.js`** with `formatFeetInches`, used by the planner labels and (from A2) the builder preview. The identical file is added on both branches, so they merge cleanly. Its Python twin is the `feet_inches` filter.
+- **Wall labels go on the two full-height walls farthest from the camera**, as HTML positioned by projecting each wall's top centre each frame. They are hidden when the point is behind the camera, and the 3D area clips them (`overflow: hidden`).
+- **The camera now orbits the centre of the room's box (half the ceiling height), not the floor.** Aiming at the floor cut off the top of the walls; panning keeps that height.
+- **`scene.js` gained `addFrameCallback(fn)`** so modules can update things that depend on the camera (stubs, labels) right before each frame.
