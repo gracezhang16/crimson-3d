@@ -10,21 +10,21 @@ Crimson3D is a website where an incoming Harvard first-year opens a to-scale 3D 
 
 It has three parts that share one data format (section 4):
 
-1. **Room library.** Measured first-year room types stored in SQLite, browsable by dorm, each with a facts page.
-2. **3D planner.** Any room type opens in the browser as a 3D scene drawn with three.js. Students drag, rotate, add and remove furniture, and logged-in students save layouts.
-3. **Admin builder.** An admin creates a room type in 2D from its dimensions, places doors and windows on its walls, publishes it, sets its default furniture, and assigns students to specific rooms.
+1. **Suite library.** Measured first-year suite types (bedrooms plus, often, a common room) stored in SQLite, browsable by dorm, each with a facts page. *(Updated 2026-11-24 for suites.)*
+2. **3D planner.** Any suite type opens in the browser as a 3D scene drawn with three.js, every room in one connected plan. Students drag, rotate, add and remove furniture (including between rooms), and logged-in students save layouts.
+3. **Admin builder.** An admin creates a suite type in 2D from each room's dimensions and position, places doors and windows on their walls, publishes it, sets its default furniture, and assigns students to specific suites.
 
 ### Users
 
 | Role | Can do |
 | --- | --- |
-| Visitor (not logged in) | Browse dorms and room types, open any published room in the planner, move furniture. Nothing is saved. |
-| Student (logged in) | Everything a visitor can, plus save named layouts, reopen them, share a read-only link, and see "My room" if an admin assigned one. |
-| Admin | Everything a student can, plus create, edit and publish room types, set default furniture, edit the furniture catalog, create rooms and assign students. |
+| Visitor (not logged in) | Browse dorms and suite types, open any published suite in the planner, move furniture. Nothing is saved. |
+| Student (logged in) | Everything a visitor can, plus save named layouts, reopen them, share a read-only link, and see "My suite" if an admin assigned one. |
+| Admin | Everything a student can, plus create, edit and publish suite types, set default furniture, edit the furniture catalog, create suites and assign students. |
 
 ### Key product decisions (already made; do not revisit without asking)
 
-- **Room types, not individual rooms, are the unit we measure and model.** A specific room (for example "Canaday B-21") is a thin record that points at a type. Harvard assigns first-years to suites, not bedrooms, so a type is what a student can actually know in advance.
+- **Suite types, not individual rooms, are the unit we measure and model.** *(Changed 2026-11-24 from room types, agreed by all three: Harvard assigns first-years to suites, which may hold several bedrooms and a common room, and furniture should move between rooms.)* A suite type is one or more rooms in one connected floor plan (section 4). A specific suite (for example "Canaday B-21") is a thin record that points at a suite type; students are assigned to suites.
 - **3D geometric model, not panoramas.** Only a measured model supports drag-and-drop and "will it fit". A 360° photo per room is a stretch goal only.
 - **Furniture turns in 90° steps only.** This keeps all collision maths to axis-aligned rectangles.
 - **All lengths are whole inches.** That is what a tape measure gives us.
@@ -224,7 +224,7 @@ CREATE TABLE dorms (
     description TEXT
 );
 
-CREATE TABLE room_types (
+CREATE TABLE suite_types (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     dorm_id      INTEGER NOT NULL REFERENCES dorms(id),
     name         TEXT NOT NULL,                      -- e.g. "Single, 4th floor"
@@ -240,17 +240,17 @@ CREATE TABLE room_types (
     UNIQUE (dorm_id, name)
 );
 
-CREATE TABLE rooms (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    dorm_id       INTEGER NOT NULL REFERENCES dorms(id),
-    number        TEXT NOT NULL,                     -- e.g. "B-21"
-    room_type_id  INTEGER NOT NULL REFERENCES room_types(id),
+CREATE TABLE suites (                            -- a specific suite, like Canaday B-21
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    dorm_id        INTEGER NOT NULL REFERENCES dorms(id),
+    number         TEXT NOT NULL,                    -- e.g. "B-21"
+    suite_type_id  INTEGER NOT NULL REFERENCES suite_types(id),
     UNIQUE (dorm_id, number)
 );
 
 CREATE TABLE assignments (
     user_id  INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    room_id  INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE
+    suite_id  INTEGER NOT NULL REFERENCES suites(id) ON DELETE CASCADE
 );
 
 CREATE TABLE furniture (
@@ -268,8 +268,8 @@ CREATE TABLE furniture (
 
 CREATE TABLE layouts (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id       INTEGER REFERENCES users(id) ON DELETE CASCADE,   -- NULL for a room type's default layout
-    room_type_id  INTEGER NOT NULL REFERENCES room_types(id) ON DELETE CASCADE,
+    user_id        INTEGER REFERENCES users(id) ON DELETE CASCADE,   -- NULL for a suite type's default layout
+    suite_type_id  INTEGER NOT NULL REFERENCES suite_types(id) ON DELETE CASCADE,
     name          TEXT NOT NULL,
     is_default    INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
     share_token   TEXT UNIQUE,
@@ -289,7 +289,7 @@ CREATE TABLE placements (
     rotation      INTEGER NOT NULL DEFAULT 0 CHECK (rotation IN (0, 90, 180, 270))
 );
 
-CREATE INDEX layouts_by_user ON layouts (user_id, room_type_id);
+CREATE INDEX layouts_by_user ON layouts (user_id, suite_type_id);
 CREATE INDEX placements_by_layout ON placements (layout_id);
 ```
 
@@ -297,7 +297,7 @@ Design notes (for DESIGN.md):
 
 - `geometry` is stored as one JSON text column because a room's shape is always read and written whole, never queried corner by corner.
 - Placements are rows, not JSON, because the shopping list and catalog edits need to query them.
-- A room type's default layout is a `layouts` row with `user_id IS NULL AND is_default = 1`. There is at most one per room type; enforce it in code.
+- A suite type's default layout is a `layouts` row with `user_id IS NULL AND is_default = 1`. There is at most one per suite type; enforce it in code.
 - Saving a layout replaces all of its placements inside a transaction (`BEGIN` / `DELETE` / `INSERT`s / `COMMIT`).
 - Make sure foreign keys are on for every connection. If `cs50.SQL` does not enable them, run `db.execute("PRAGMA foreign_keys = ON")` once after connecting, and check with a test.
 
@@ -306,10 +306,10 @@ Design notes (for DESIGN.md):
 `init_db.py` creates a fresh `crimson3d.db` from `schema.sql`, then loads:
 
 - `seed/furniture.json`: the catalog below.
-- `seed/rooms/*.json`: one file per room type, each `{dorm, name, capacity, bathroom, geometry, measured_by, measured_on, notes, status, default_layout: [placements by furniture slug]}`.
+- `seed/suites/*.json`: one file per suite type, each `{dorm, name, capacity, bathroom, geometry (format version 2), measured_by, measured_on, notes, status, default_layout: [placements by furniture slug]}`.
 - With `--demo-users`: three invented student accounts and their passwords, printed to the terminal, for the showcase. Never real names or real room assignments.
 
-Ship two invented sample rooms in a dorm called **"Demo Hall"** so the site works before real measurements exist: a single (114 × 150 in, ceiling 102) and a double (144 × 192 in, ceiling 102). Mark them `measured_by: "Sample data, not a real room"`. Real rooms are added through the admin builder and exported to `seed/rooms/` (see A9).
+Ship invented sample suites in a dorm called **"Demo Hall"** so the site works before real measurements exist: a single (one 114 × 150 in bedroom, ceiling 102), a double (one 144 × 192 in bedroom) and a two-bedroom suite (two 120 × 144 in bedrooms and a 180 × 293 in common room, 5 in walls between). Mark them `measured_by: "Sample data, not a real suite"` (or "room"). Real suites are added through the admin builder and exported to `seed/suites/` (see A9). *(Updated 2026-11-24 for suites.)*
 
 Furniture catalog seed. **Harvard dimensions are placeholders until we measure the real pieces**; mark each with `note: "Placeholder size: replace with measured"`.
 
@@ -344,7 +344,7 @@ crimson3d/
 ├── schema.sql
 ├── init_db.py              # build crimson3d.db from schema.sql + seed/
 ├── create_admin.py         # python create_admin.py you@example.com
-├── export_rooms.py         # write published room types back to seed/rooms/*.json
+├── export_rooms.py         # write published suite types back to seed/suites/*.json
 ├── requirements.txt
 ├── seed/
 │   ├── furniture.json
@@ -353,8 +353,8 @@ crimson3d/
 │   ├── layout.html         # base: navbar, import map, flash messages, footer disclaimer
 │   ├── apology.html
 │   ├── index.html          # dorm list + search
-│   ├── dorm.html           # one dorm's room types
-│   ├── room_type.html      # facts card + "Open in 3D"
+│   ├── dorm.html           # one dorm's suite types
+│   ├── suite_type.html     # facts card (each room + totals) + "Open in 3D"
 │   ├── plan.html           # the planner page                                     (Claire)
 │   ├── share.html          # read-only planner
 │   ├── my_layouts.html
@@ -362,8 +362,8 @@ crimson3d/
 │   ├── login.html, register.html
 │   └── admin/
 │       ├── index.html
-│       ├── room_types.html, room_type_form.html, default_layout.html
-│       ├── rooms.html
+│       ├── suite_types.html, suite_type_form.html
+│       ├── suites.html          # specific suites and their students
 │       └── furniture.html
 ├── static/
 │   ├── css/style.css
@@ -411,18 +411,18 @@ db = SQL(os.environ.get("CRIMSON3D_DB", "sqlite:///crimson3d.db"))
 
 | Method | Route | Access | Page |
 | --- | --- | --- | --- |
-| GET | `/` | anyone | Dorm list with a search box (filters dorms and room types by name) |
-| GET | `/dorms/<int:dorm_id>` | anyone | Dorm name, description, its published room types as cards |
+| GET | `/` | anyone | Dorm list with a search box (filters dorms and suite types by name) |
+| GET | `/dorms/<int:dorm_id>` | anyone | Dorm name, description, its published suite types as cards |
 | GET | `/types/<int:type_id>` | anyone | Facts card: dimensions in ft and in, area in sq ft, ceiling, bathroom, closet or wardrobe, window count, who measured it and when, accuracy note; button "Open in 3D" |
 | GET | `/plan/<int:type_id>` | anyone | Planner, starting from the default layout. `?layout=<id>` opens a saved layout (owner only) |
-| GET | `/my-room` | student | Redirects to the planner for the assigned room's type; if none, a page saying no room is assigned |
+| GET | `/my-suite` | student | Redirects to the planner for the assigned suite's type; if none, a page saying no suite is assigned | *(Updated 2026-11-24 for suites.)*
 | GET | `/layouts` | student | The student's saved layouts with Open, Rename, Delete, Share |
 | GET | `/layouts/<int:layout_id>/shopping-list` | owner | Non-Harvard items in the layout with dimensions and checkboxes |
 | GET | `/share/<token>` | anyone with link | Read-only planner (camera moves, furniture does not) |
 | GET, POST | `/register`, `/login` | anyone | As in CS50 Finance; email + password + confirmation |
 | GET | `/logout` | anyone | Clears session |
 
-Draft room types return 404 to everyone except admins.
+Draft suite types return 404 to everyone except admins.
 
 The accuracy note on every facts page: "Measured by {measured_by} on {measured_on}. Rooms of the same type can differ by a few inches; measure big purchases against your own room."
 
@@ -434,7 +434,7 @@ All responses are JSON. Errors are `{"error": "message for a person"}` with stat
 | --- | --- | --- | --- |
 | GET | `/api/types/<id>` | anyone (published) / admin (draft) | → `{id, name, dorm: {id, name}, capacity, geometry, default_layout: {placements: [...]}}` |
 | GET | `/api/furniture` | anyone | → `[{id, slug, name, category, width, depth, height, clearance, color, note}]` |
-| GET | `/api/layouts?type_id=<id>` | student | → `[{id, name, updated}]` for that student and room type |
+| GET | `/api/layouts?type_id=<id>` | student | → `[{id, name, updated}]` for that student and suite type |
 | POST | `/api/layouts` | student | `{type_id, name, placements}` → `201 {id}` |
 | GET | `/api/layouts/<id>` | owner | → `{id, name, type_id, placements, share_url}` |
 | PUT | `/api/layouts/<id>` | owner | `{name?, placements?}` → `{ok: true, updated}` |
@@ -443,7 +443,7 @@ All responses are JSON. Errors are `{"error": "message for a person"}` with stat
 | DELETE | `/api/layouts/<id>/share` | owner | → `{ok: true}`; removes the token, old link stops working |
 | GET | `/api/share/<token>` | anyone | → `{name, type_id, geometry, placements}` |
 
-Limits: a student may have at most 20 layouts per room type; a layout at most 100 placements; layout names 1 to 60 characters.
+Limits: a student may have at most 20 layouts per suite type; a layout at most 100 placements; layout names 1 to 60 characters.
 
 Server-side validation of placements (`geometry.validate_placements`) checks types, ranges, rotation values, that `furniture_id` exists, and that the centre lies within the room's bounding box. It does **not** check collisions; those are advice shown to the student, not errors.
 
@@ -454,7 +454,7 @@ Every route uses `@admin_required`.
 | Method | Route | What it does |
 | --- | --- | --- |
 | GET | `/admin` | Admin home: counts, links |
-| GET | `/admin/types` | All room types with status, dorm, last updated |
+| GET | `/admin/types` | All suite types with status, dorm, last updated |
 | GET, POST | `/admin/types/new` | Builder form (empty) |
 | GET, POST | `/admin/types/<id>/edit` | Builder form (filled) |
 | POST | `/admin/types/<id>/publish` | Sets status to published (only if geometry validates) |
@@ -462,9 +462,9 @@ Every route uses `@admin_required`.
 | GET | `/admin/types/<id>/default-layout` | Planner in admin mode |
 | PUT | `/admin/api/types/<id>/default-layout` | `{placements}` → saves the default layout |
 | GET, POST | `/admin/dorms` | List and add dorms |
-| GET, POST | `/admin/rooms` | List rooms; add a room (dorm, number, room type) |
-| POST | `/admin/rooms/<id>/assign` | Form field `email`; creates the account link in `assignments` (the student must already have registered) |
-| POST | `/admin/rooms/<id>/unassign` | Removes the assignment |
+| GET, POST | `/admin/suites` | List specific suites with their students; add a suite (number, suite type; its dorm comes from the type) | *(Updated 2026-11-24 for suites.)*
+| POST | `/admin/suites/<id>/assign` | Form field `email`; links a registered student to the suite (moving them if they had one; refused when the suite is at capacity) |
+| POST | `/admin/suites/<id>/unassign` | Form field `user_id`; removes that student from the suite |
 | GET, POST | `/admin/furniture` | Edit catalog sizes, names, colours |
 
 The builder form posts the geometry as a hidden JSON field built by `builder/main.js`, plus the ordinary fields (dorm, name, capacity, bathroom, measured_by, measured_on, notes). The server parses it and runs `geometry.validate_room()`. On error, re-render the form with the submitted values and a list of human-readable errors such as "Window 2 is wider than wall C (42 in on a 36 in wall)".
@@ -500,6 +500,10 @@ The builder form posts the geometry as a hidden JSON field built by `builder/mai
 - `edit`: full planner. Save buttons appear only when logged in; when logged out, show "Log in to save this layout".
 - `view`: share page. Camera controls work; furniture cannot be selected or moved; side panel shows the item list and shopping list only.
 - `admin-default`: like `edit`, but Save writes to the default-layout endpoint.
+
+### 8.1a Suites *(added 2026-11-24)*
+
+A suite's rooms are drawn together in one plan. Every wall, between rooms or outside, follows the dollhouse rule (8.3), so turning the view opens up different rooms; doorways between rooms are openings with a lintel above and a threshold across the wall's gap. A **Rooms** picker (Whole suite, then each room) points the camera at one room and lowers the other rooms' walls. Room names lie on each floor. Items may be placed in any room; an item straddling a wall between rooms gets the issue "Crosses a wall" (4.5 rule 8).
 
 ### 8.2 Scene
 
@@ -556,6 +560,10 @@ A visual reference for the intended look and behaviour is `docs/demo-reference.h
 ---
 
 ## 9. The admin builder (Hannah)
+
+### 9.0 Suites *(added 2026-11-24)*
+
+The builder edits one room at a time: room tabs (and clicking a room in the preview) choose the room shown in the editor, with its name, kind (bedroom or common room), shape, position (its north-west corner, in inches from the suite's west and north sides) and features. "+ Add room" and "Place east/south of [room] with a [5] in wall" position rooms automatically. The ceiling is set once for the whole suite. The preview draws the whole suite, highlighting the room being edited. Custom (non-rectangular) rooms are entered by walking their walls (direction and length each), which brought part of 9.2 into the Good tier.
 
 ### 9.1 Good tier: rectangular rooms
 
@@ -632,6 +640,15 @@ Each milestone ends with something you can see working. Do them in order within 
 | A8 | B | Click-to-draw outlines for non-rectangular rooms | An L-shaped room can be drawn, saved and opened in 3D |
 | A9 | B | Export button calling `export_rooms.py` logic | Real rooms saved to `seed/rooms/` and committed |
 
+### Suite track *(added 2026-11-24)*
+
+| # | Milestone | Done when |
+| --- | --- | --- |
+| U1 | Rename to suites; suite format version 2; seeds become suites plus a two-bedroom sample | The sample suite opens in 3D with its furniture fitting |
+| U2 | Planner for suites: walls between rooms, doorways, room labels, "Crosses a wall" | Furniture can be dragged between rooms; straddling a wall is flagged |
+| U3 | Builder for suites: room tabs, positions, whole-suite preview | An admin builds a two-bedroom suite that opens correctly in 3D |
+| U4 | Full-height walls with a Rooms picker; suites page; SPEC updated; end-to-end check | A student saves a layout in a suite, logs out and in, and reopens it |
+
 ### Integration checkpoints (all three)
 
 1. **I1, after P4 + S4:** a Demo Hall room loads from the database in the planner.
@@ -688,7 +705,7 @@ HarvardKey login; a phone app; augmented reality; LiDAR scanning; real-time mult
 
 These need a human decision. Claude Code should ask rather than guess.
 
-- Real dorms and room types to seed beyond Demo Hall, once measured.
+- Real dorms and suite types to seed beyond Demo Hall, once measured.
 - Measured sizes of the Harvard-issued furniture (replace the placeholders).
 - Whether to deploy publicly (Best tier) and where.
 - The final project name, if it changes from Crimson3D.

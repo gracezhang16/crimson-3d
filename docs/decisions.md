@@ -342,3 +342,18 @@ Technical choices:
 - **`geometryToForm` reopens any suite of right-angled rooms** (each room's position is its outline's minimum corner); a node test round-trips the sample suite through the form and back to the identical JSON.
 - **The preview draws the whole suite** (`drawSuite`): the selected room in full (features, corner arrows, wall labels), the others lighter with their names and clickable.
 - **The sticky preview now sits below the sticky navbar** (and under it when they meet).
+
+## 2026-11-24 (Suites, step U4: full-height walls, Rooms picker, SPEC, end to end)
+
+Product choice from Grace:
+
+- **Walls between rooms are full height again, and you turn the view to see different rooms** (U2's 8 in walls looked odd). Every wall, between rooms or outside, follows the dollhouse rule: it drops to a stub when the camera is on its outer side. Turning the view therefore opens up different rooms.
+
+Technical choices:
+
+- **A "Rooms" picker** in the planner panel (Whole suite, then each room, for suites with more than one room) points the camera at one room (`fitCamera` with that room's box) and lowers every other room's walls, so a room can be seen into from any side without hunting for the right angle. "Whole suite" goes back to the plain dollhouse rule.
+- **Doorways between rooms are real openings**: the wall is cut out up to the door's height on both sides, a lintel (the strip of wall above the door) fills the rest up to the ceiling, and a threshold covers the gap. `insideWalls` now records each doorway's height. No door panel is drawn over the opening. Lintels are hidden when their wall drops to a stub.
+- **Outside walls at a suite's corners now meet instead of overlapping**: at an outer corner next to a wall between rooms, an outside wall reaches only half way across the gap, and the next room's outside wall reaches the other half. This removes the flickering seam noted in U2.
+- **Areas round halves up everywhere** (`sq_ft` filter): Python's built-in rounding sends 606.25 to 606.2 (to the even neighbour), while the builder's JavaScript shows 606.3; the facts and dorm pages now match the builder.
+- **SPEC.md sections 1, 5, 6, 7, 8, 9 and 10 updated for suites**, each change marked with its date. The old milestone rows are left as the history of what was built.
+- **End-to-end check in headless Chrome**: an admin adds suite B-21 of the two-bedroom type and assigns a registered student; the student's "My suite" opens that suite's planner; they move a desk from Bedroom A into the common room, save, log out, log in, and reopen the layout from My layouts with the desk where they left it.

@@ -33,16 +33,21 @@ const COLORS = {
  * Build every feature of one room of a suite.
  *
  * @param {{outline: number[][], features: object[]}} room
+ * @param {Set<number>} [doorways] - walls whose doors are openings between
+ *   rooms (room.js cuts them out of the wall), so no door panel is drawn
  * @returns {{onWall: THREE.Group[], onFloor: THREE.Group}}
  *   onWall[i] holds the panels mounted on wall i (hidden with the wall when
  *   it drops to a stub); onFloor holds radiators and door zones, which stay.
  */
-export function buildFeatures(room) {
+export function buildFeatures(room, doorways = new Set()) {
   const { outline, features } = room;
   const onWall = outline.map(() => new THREE.Group());
   const onFloor = new THREE.Group();
 
   for (const feature of features) {
+    if (feature.kind === "door" && doorways.has(feature.wall)) {
+      continue;
+    }
     const object = makeFeature(feature);
     placeOnWall(object, outline, feature);
     (feature.kind === "radiator" ? onFloor : onWall[feature.wall]).add(object);

@@ -13,7 +13,6 @@ import { cameraOutsideWall, insideWalls, isConvexCorner } from "./roomMath.js";
 
 const WALL_THICKNESS = 5;   // inches, standing outside the outline (SPEC.md 8.3)
 const STUB_HEIGHT = 4;      // inches, for walls that would hide the room
-const INSIDE_HEIGHT = 8;    // inches: walls between rooms of a suite stay low so every room shows
 const THRESHOLD_COLOR = 0xb98b5e; // the wooden strip across a doorway between rooms
 const GRID_SPACING = 12;    // inches between floor grid lines
 const FLOOR_COLOR = "#e9e2d4";
@@ -27,11 +26,12 @@ const WALL_EDGE_COLOR = 0x9aa1ad;
  *
  * @param {{ceiling: number, rooms: {outline: number[][], features: object[]}[]}} geometry
  *   - the suite format (version 2)
- * @returns {{group: THREE.Group, bounds: THREE.Box3, walls: object[],
- *   update: (camera: THREE.Camera) => void}}
+ * @returns {{group: THREE.Group, bounds: THREE.Box3, roomBounds: THREE.Box3[], walls: object[],
+ *   update: (camera: THREE.Camera, focus?: number | null) => void}}
  *   `walls` lists every room's walls; each has `mesh`, `length`, `top` (the
- *   3D point at the top centre of its inner face) and `isStub`. Call
- *   `update(camera)` before each frame.
+ *   3D point at the top centre of its inner face) and `isStub`. `roomBounds`
+ *   has one box per room, for pointing the camera at a room. Call
+ *   `update(camera, focus)` before each frame.
  */
 export function buildRoom(geometry) {
   const { ceiling } = geometry;
@@ -46,28 +46,40 @@ export function buildRoom(geometry) {
     new THREE.Vector3(Math.min(...xs), 0, Math.min(...ys)),
     new THREE.Vector3(Math.max(...xs), ceiling, Math.max(...ys)),
   );
+  const roomBounds = geometry.rooms.map(({ outline }) => new THREE.Box3(
+    new THREE.Vector3(Math.min(...outline.map(([x]) => x)), 0, Math.min(...outline.map(([, y]) => y))),
+    new THREE.Vector3(Math.max(...outline.map(([x]) => x)), ceiling, Math.max(...outline.map(([, y]) => y))),
+  ));
 
   /**
-   * Dollhouse view: drop every outside wall that stands between the camera
-   * and its room to a stub, hiding the doors, windows and so on mounted on
-   * it; raise the others to full height. Walls between rooms stay low
-   * whatever the camera does. Radiators and door zones are on the floor, so
-   * they always show.
+   * Dollhouse view: every wall, between rooms or outside, drops to a stub
+   * when the camera is on its outer side (it would hide its room), taking
+   * the doors, windows and so on mounted on it; the others stand at full
+   * height. Turning the view therefore opens up different rooms. When a
+   * room is in focus, every other room's walls drop too, so the focused room
+   * can be seen into from anywhere. Radiators and door zones are on the
+   * floor, so they always show.
+   *
    * @param {THREE.Camera} camera
+   * @param {number | null} [focus] - index of the room in focus, or null for the whole suite
    */
-  function update(camera) {
+  function update(camera, focus = null) {
     const cameraPlan = [camera.position.x, camera.position.z];
-    for (const { outline, wallParts, features } of rooms) {
+    rooms.forEach(({ outline, wallParts, features }, r) => {
       wallParts.forEach((part, i) => {
-        if (part.inside) return;
-        part.isStub = cameraOutsideWall(outline, i, cameraPlan);
-        setWallHeight(part.mesh, part.isStub ? STUB_HEIGHT : ceiling);
+        part.isStub = (focus !== null && r !== focus) || cameraOutsideWall(outline, i, cameraPlan);
+        if (part.inside) {
+          setWallHeight(part.pieces, part.isStub ? STUB_HEIGHT : ceiling);
+          part.lintels.visible = !part.isStub;
+        } else {
+          setWallHeight(part.mesh, part.isStub ? STUB_HEIGHT : ceiling);
+        }
         features.onWall[i].visible = !part.isStub;
       });
-    }
+    });
   }
 
-  return { group, bounds, walls: rooms.flatMap((room) => room.wallParts), update };
+  return { group, bounds, roomBounds, walls: rooms.flatMap((room) => room.wallParts), update };
 }
 
 /**
@@ -84,15 +96,15 @@ function buildOneRoom(room, ceiling, group, between) {
   group.add(makeFloor(outline));
   const wallParts = walls(outline).map((_, i) => (between[i].inside
     ? makeInsideWall(outline, i, ceiling, between[i])
-    : makeWall(outline, i, ceiling)));
+    : makeWall(outline, i, ceiling, between)));
   wallParts.forEach((part) => group.add(part.mesh));
-  const features = buildFeatures(room);
-  features.onWall.forEach((wallFeatures, i) => {
-    // Panels on a low wall between rooms would float in mid-air, so they're
-    // hidden; a doorway shows as a gap in the wall with a threshold instead.
-    wallFeatures.visible = !between[i].inside;
-    group.add(wallFeatures);
-  });
+  // A door between rooms is an opening in the wall (with a threshold), so no
+  // door panel is drawn over it.
+  const doorways = new Set(room.features
+    .filter((feature) => feature.kind === "door" && between[feature.wall].inside)
+    .map((feature) => feature.wall));
+  const features = buildFeatures(room, doorways);
+  features.onWall.forEach((wallFeatures) => group.add(wallFeatures));
   group.add(features.onFloor);
   for (const feature of room.features) {
     if (feature.kind === "door" && between[feature.wall].inside && between[feature.wall].gap > 0) {
@@ -103,15 +115,17 @@ function buildOneRoom(room, ceiling, group, between) {
 }
 
 /**
- * A low wall between two rooms, built from pieces with the doorways left out.
- * Both rooms draw their side of the gap, each half as thick as the gap, so
+ * A wall between two rooms: full-height pieces with the doorways left out,
+ * and a lintel (the strip of wall above a door) over each doorway. Both
+ * rooms draw their side of the gap, each half as thick as the gap, so
  * together they fill it without overlapping (overlapping faces flicker).
  *
  * @param {number[][]} outline
  * @param {number} i - wall index
  * @param {number} ceiling - inches
- * @param {{gap: number, pieces: number[][]}} info - from insideWalls()
- * @returns {{mesh: THREE.Group, length: number, top: THREE.Vector3, isStub: boolean, inside: boolean}}
+ * @param {{gap: number, pieces: number[][], doorways: number[][]}} info - from insideWalls()
+ * @returns {{mesh: THREE.Group, pieces: THREE.Group, lintels: THREE.Group, length: number,
+ *   top: THREE.Vector3, isStub: boolean, inside: boolean}}
  */
 function makeInsideWall(outline, i, ceiling, info) {
   const { start, end } = walls(outline)[i];
@@ -120,25 +134,39 @@ function makeInsideWall(outline, i, ceiling, info) {
   const direction = [(end[0] - start[0]) / length, (end[1] - start[1]) / length];
   const thickness = Math.max(info.gap / 2, 0.75);
   const material = new THREE.MeshStandardMaterial({ color: WALL_COLOR });
-  const pieces = new THREE.Group();
-  for (const [from, to] of info.pieces) {
-    const box = new THREE.BoxGeometry(to - from, 1, thickness);
-    box.translate(0, 0.5, 0);
-    const piece = new THREE.Mesh(box, material);
-    piece.add(new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: WALL_EDGE_COLOR })));
+  /** A box along the wall from `from` to `to`, `bottom` to `bottom + height` high. */
+  function slab(from, to, bottom, height) {
+    const box = new THREE.BoxGeometry(to - from, height, thickness);
+    box.translate(0, bottom + height / 2, 0);
+    const mesh = new THREE.Mesh(box, material);
+    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: WALL_EDGE_COLOR })));
     const along = (from + to) / 2;
-    piece.position.set(
+    mesh.position.set(
       start[0] + direction[0] * along - nx * (thickness / 2), 0,
       start[1] + direction[1] * along - ny * (thickness / 2),
     );
-    piece.rotation.y = -Math.atan2(direction[1], direction[0]);
-    pieces.add(piece);
+    mesh.rotation.y = -Math.atan2(direction[1], direction[0]);
+    return mesh;
   }
-  // Built 1 unit tall like the outside walls, so one scale sets the height.
-  setWallHeight(pieces, INSIDE_HEIGHT);
+
+  // Pieces are built 1 unit tall, like the outside walls, so one scale sets
+  // their height (full, or a stub). Lintels hang from the ceiling and are
+  // simply hidden when the wall drops.
+  const pieces = new THREE.Group();
+  for (const [from, to] of info.pieces) {
+    pieces.add(slab(from, to, 0, 1));
+  }
+  const lintels = new THREE.Group();
+  for (const [from, to, doorHeight] of info.doorways) {
+    if (doorHeight < ceiling) {
+      lintels.add(slab(Math.max(0, from), Math.min(length, to), doorHeight, ceiling - doorHeight));
+    }
+  }
+  setWallHeight(pieces, ceiling);
+  const mesh = new THREE.Group();
+  mesh.add(pieces, lintels);
   const mid = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
-  // isStub is always true, so wall-length labels skip these low walls.
-  return { mesh: pieces, length, top: new THREE.Vector3(mid[0], ceiling, mid[1]), isStub: true, inside: true };
+  return { mesh, pieces, lintels, length, top: new THREE.Vector3(mid[0], ceiling, mid[1]), isStub: false, inside: true };
 }
 
 /**
@@ -220,16 +248,23 @@ function makeGridTexture() {
  * @param {number[][]} outline
  * @param {number} i - wall index
  * @param {number} ceiling - inches
+ * @param {object[]} between - insideWalls() for this room, wall by wall
  * @returns {{mesh: THREE.Mesh, length: number, top: THREE.Vector3, isStub: boolean}}
  */
-function makeWall(outline, i, ceiling) {
+function makeWall(outline, i, ceiling, between) {
   const { start, end } = walls(outline)[i];
   const length = wallLength(outline, i);
   const [nx, ny] = inwardNormal(outline, i);
   const direction = [(end[0] - start[0]) / length, (end[1] - start[1]) / length];
 
-  const extendStart = isConvexCorner(outline, i) ? WALL_THICKNESS : 0;
-  const extendEnd = isConvexCorner(outline, (i + 1) % outline.length) ? WALL_THICKNESS : 0;
+  // At an outer corner the wall is lengthened to meet its neighbour. If the
+  // neighbour is a wall between rooms, only reach half way across the gap:
+  // the next room's outside wall reaches the other half, so the two meet
+  // instead of overlapping (which showed as a flickering seam).
+  const n = outline.length;
+  const reach = (wall) => (between[wall].inside ? between[wall].gap / 2 : WALL_THICKNESS);
+  const extendStart = isConvexCorner(outline, i) ? reach((i - 1 + n) % n) : 0;
+  const extendEnd = isConvexCorner(outline, (i + 1) % n) ? reach((i + 1) % n) : 0;
   const boxLength = length + extendStart + extendEnd;
 
   // Centre of the box: along the wall (shifted toward whichever end was

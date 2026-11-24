@@ -153,9 +153,9 @@ export function cutIntervals(length, holes) {
  * @param {{rooms: {outline: number[][], features: object[]}[]}} geometry
  * @returns {{inside: boolean, gap: number, doorways: number[][],
  *   pieces: number[][]}[][]} result[room][wall]: `gap` is the distance to the
- *   facing wall (inches), `doorways` and `pieces` are [from, to] stretches
- *   along the wall (inches from its start corner), pieces being what's left
- *   to draw once the doorways are cut out.
+ *   facing wall (inches); `doorways` are [from, to, height] (inches along the
+ *   wall from its start corner, and the door's height); `pieces` are the
+ *   [from, to] stretches of wall left once the doorways are cut out.
  */
 export function insideWalls(geometry) {
   const frames = geometry.rooms.map((room) => wallFrames(room.outline));
@@ -194,12 +194,12 @@ export function insideWalls(geometry) {
     for (const feature of room.features) {
       if (feature.kind !== "door" || !result[r][feature.wall]?.inside) continue;
       const a = frames[r][feature.wall];
-      result[r][feature.wall].doorways.push([feature.offset, feature.offset + feature.width]);
+      result[r][feature.wall].doorways.push([feature.offset, feature.offset + feature.width, feature.height]);
       for (const { room: rb, wall: wb } of info[r][feature.wall].facing) {
         const b = frames[rb][wb];
         const along = (t) => dot([a.start[0] + a.dir[0] * t - b.start[0], a.start[1] + a.dir[1] * t - b.start[1]], b.dir);
         const [p, q] = [along(feature.offset), along(feature.offset + feature.width)];
-        result[rb][wb].doorways.push([Math.min(p, q), Math.max(p, q)]);
+        result[rb][wb].doorways.push([Math.min(p, q), Math.max(p, q), feature.height]);
       }
     }
   });

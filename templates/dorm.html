@@ -27,7 +27,7 @@
                             <ul class="list-unstyled mb-0 small">
                                 <li>
                                     {{ type.facts.summary }}
-                                    · {{ "%.1f" | format(type.facts.area_sq_ft) }} sq ft
+                                    · {{ type.facts.area_sq_ft | sq_ft }} sq ft
                                 </li>
                                 <li>{{ type.capacity }} student{{ "s" if type.capacity != 1 }}</li>
                                 <li>{{ type.bathroom_label }}</li>

@@ -61,6 +61,16 @@
                 {% endif %}
             </section>
 
+            {# Suites with several rooms: point the camera at one room (main.js).
+               Hidden for a one-room suite. #}
+            <section id="room-focus" hidden>
+                <h2 class="planner-heading">Rooms</h2>
+                <div class="d-flex flex-wrap gap-1" id="room-focus-buttons" role="group" aria-label="Look at a room"></div>
+                <p class="small text-body-secondary mb-0">
+                    Pick a room to look into it, or turn the view: walls between you and a room drop out of the way.
+                </p>
+            </section>
+
             {# Filled by panel.js. Hidden until an item is selected. #}
             <section id="selection" hidden>
                 <h2 class="planner-heading">Selected</h2>

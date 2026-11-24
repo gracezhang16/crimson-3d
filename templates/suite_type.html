@@ -48,7 +48,7 @@
                                     {{ room.width | feet_inches }} × {{ room.length | feet_inches }}
                                     <span class="text-body-secondary small">({{ room.width }} × {{ room.length }} in{% if not room.is_rectangle %}, overall{% endif %})</span>
                                 </td>
-                                <td class="text-end">{{ "%.1f" | format(room.area_sq_ft) }} sq ft</td>
+                                <td class="text-end">{{ room.area_sq_ft | sq_ft }} sq ft</td>
                                 <td>
                                     {% if room.has_closet %}Built-in closet
                                     {% elif room.kind == "bedroom" %}No closet; Harvard provides a wardrobe
@@ -63,7 +63,7 @@
 
             <dl class="row mb-0">
                 <dt class="col-5">Floor area</dt>
-                <dd class="col-7">{{ "%.1f" | format(facts.area_sq_ft) }} sq ft{% if facts.rooms | length > 1 %} in all{% endif %}</dd>
+                <dd class="col-7">{{ facts.area_sq_ft | sq_ft }} sq ft{% if facts.rooms | length > 1 %} in all{% endif %}</dd>
 
                 <dt class="col-5">Ceiling</dt>
                 <dd class="col-7">{{ facts.ceiling | feet_inches }} <span class="text-body-secondary">({{ facts.ceiling }} in)</span></dd>

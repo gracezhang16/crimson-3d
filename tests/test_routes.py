@@ -491,3 +491,10 @@ def test_plan_default_layout_id_is_403_for_students(client):
     )[0]["id"]
     log_in(client, add_user())
     assert client.get(f"/plan/{type_id('Single (sample)')}?layout={default_id}").status_code == 403
+
+
+def test_sq_ft_rounds_halves_up_like_the_builder():
+    from pages import sq_ft
+    assert sq_ft(606.25) == "606.3"
+    assert sq_ft(118.75) == "118.8"
+    assert sq_ft(192) == "192.0"

@@ -95,14 +95,54 @@ async function start(canvas, config) {
 
   const labels = createWallLabels(container, room.walls);
   const roomLabels = createRoomLabels(container, roomType.geometry.rooms);
+  const focus = createRoomFocus(roomType.geometry.rooms, room, view);
   // Order matters: the room decides which walls are stubs, then the labels
   // pick from the walls still standing.
   view.addFrameCallback((camera) => {
-    room.update(camera);
+    room.update(camera, focus.current());
     labels.update(camera);
     roomLabels.update(camera);
   });
   view.fitCamera(room.bounds);
+}
+
+/**
+ * The "Rooms" buttons for a suite with several rooms: "Whole suite" plus one
+ * per room. Picking a room points the camera at it, and room.update() then
+ * lowers every other room's walls so it can be seen into from any side.
+ *
+ * @param {{name: string}[]} rooms
+ * @param {ReturnType<typeof buildRoom>} room
+ * @param {ReturnType<typeof createScene>} view
+ * @returns {{current: () => number | null}} the room in focus (null = whole suite)
+ */
+function createRoomFocus(rooms, room, view) {
+  let focus = null;
+  const section = document.querySelector("#room-focus");
+  if (rooms.length < 2) {
+    return { current: () => null };
+  }
+  section.hidden = false;
+  const box = document.querySelector("#room-focus-buttons");
+
+  function render() {
+    const choices = [["Whole suite", null], ...rooms.map((r, i) => [r.name, i])];
+    box.replaceChildren(...choices.map(([label, index]) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `btn btn-sm ${index === focus ? "btn-crimson" : "btn-outline-secondary"}`;
+      button.setAttribute("aria-pressed", String(index === focus));
+      button.textContent = label;
+      button.addEventListener("click", () => {
+        focus = index;
+        view.fitCamera(index === null ? room.bounds : room.roomBounds[index]);
+        render();
+      });
+      return button;
+    }));
+  }
+  render();
+  return { current: () => focus };
 }
 
 const plannerElement = document.querySelector("#planner");

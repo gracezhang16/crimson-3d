@@ -120,11 +120,11 @@ test("the sample suite's walls between rooms are found, with their 5 in gap", ()
 test("a door between rooms opens both walls", () => {
   const walls = insideWalls(SAMPLE_SUITE);
   // Bedroom A's door: east wall, 100 in from its north end, 32 wide.
-  assert.deepEqual(walls[0][1].doorways, [[100, 132]]);
+  assert.deepEqual(walls[0][1].doorways, [[100, 132, 80]]);   // from, to, door height
   assert.deepEqual(walls[0][1].pieces, [[0, 100], [132, 144]]);
   // The common room's west wall runs north from (125, 293): A's door (y 100..132)
   // is 161..193 along it, and B's door (y 153..185) is 108..140.
-  assert.deepEqual(walls[2][3].doorways.sort((p, q) => p[0] - q[0]), [[108, 140], [161, 193]]);
+  assert.deepEqual(walls[2][3].doorways.sort((p, q) => p[0] - q[0]), [[108, 140, 80], [161, 193, 80]]);
   assert.deepEqual(walls[2][3].pieces, [[0, 108], [140, 161], [193, 293]]);
 });
 

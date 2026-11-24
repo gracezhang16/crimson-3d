@@ -1,6 +1,7 @@
 """Blueprint "pages": public and student HTML pages (Grace). Routes: SPEC.md 7.1."""
 
 import json
+import math
 
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -21,6 +22,16 @@ BATHROOM_LABELS = {
 # ---------------------------------------------------------------------------
 # Helpers for these pages
 # ---------------------------------------------------------------------------
+
+@pages.app_template_filter("sq_ft")
+def sq_ft(area):
+    """Format square feet to one decimal place, rounding halves up (606.25 -> 606.3).
+
+    Python's own rounding sends halves to the even neighbour (606.2), but the
+    builder's JavaScript (toFixed) rounds them up; this keeps both the same.
+    """
+    return f"{math.floor(area * 10 + 0.5) / 10:.1f}"
+
 
 @pages.app_template_filter("feet_inches")
 def feet_inches(inches):
