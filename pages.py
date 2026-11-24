@@ -2,7 +2,7 @@
 
 import json
 
-from flask import Blueprint, flash, redirect, render_template, request, session
+from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from geometry import signed_area
@@ -155,6 +155,27 @@ def room_type(type_id):
     return render_template("room_type.html", room_type=with_facts(rows[0]))
 
 
+@pages.route("/plan/<int:type_id>")
+def plan(type_id):
+    """Open a room type in the 3D planner (the page and its JavaScript are Claire's).
+
+    The page passes everything the JavaScript needs through data-* attributes
+    on #planner (SPEC.md 8.1); the planner then loads the room itself from
+    /api/types/<id>. Drafts give the same 404 as on the facts page.
+    ?layout=<id> (open a saved layout, owner only) arrives in P6.
+    """
+    rows = db.execute(
+        "SELECT room_types.id, room_types.name, room_types.status, "
+        "dorms.id AS dorm_id, dorms.name AS dorm_name "
+        "FROM room_types JOIN dorms ON dorms.id = room_types.dorm_id "
+        f"WHERE room_types.id = ? AND {VISIBLE_TYPE}",
+        type_id, int(viewer_is_admin()),
+    )
+    if not rows:
+        return apology("We couldn't find that room type.", 404)
+    return render_template("plan.html", room_type=rows[0], layout_id="", mode="edit")
+
+
 # ---------------------------------------------------------------------------
 # Student pages: my room, my layouts
 # ---------------------------------------------------------------------------
@@ -180,8 +201,7 @@ def my_room():
         return render_template("my_room.html", room=None)
     room = rows[0]
     if room["status"] == "published" or viewer_is_admin():
-        # /plan/<id> is served once the planner route exists (Claire, P1).
-        return redirect(f"/plan/{room['room_type_id']}")
+        return redirect(url_for("pages.plan", type_id=room["room_type_id"]))
     return render_template("my_room.html", room=room)
 
 

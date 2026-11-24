@@ -55,8 +55,8 @@
                                 <time datetime="{{ layout.updated | replace(' ', 'T') }}Z">{{ layout.updated[:10] }}</time>
                             </td>
                             <td class="text-end text-nowrap">
-                                {# /plan/<id> is served once the planner route exists (Claire, P1). #}
-                                <a class="btn btn-sm btn-crimson" href="/plan/{{ layout.room_type_id }}?layout={{ layout.id }}">Open</a>
+                                <a class="btn btn-sm btn-crimson"
+                                   href="{{ url_for('pages.plan', type_id=layout.room_type_id, layout=layout.id) }}">Open</a>
                                 <button type="button" class="btn btn-sm btn-outline-secondary" data-action="rename">Rename</button>
                                 <button type="button" class="btn btn-sm btn-outline-danger" data-action="delete">Delete</button>
                             </td>

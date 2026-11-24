@@ -108,3 +108,15 @@ Technical choices:
 - **"Last saved" is sent as UTC in `<time datetime="...Z">` and shown in the viewer's time zone by JavaScript** (`toLocaleString`). Without JavaScript the UTC date is shown. Alternative: format on the server, which can't know the viewer's time zone.
 - **layouts.js builds messages with `textContent`, never `innerHTML`**, so a layout named `<script>` is shown as text, not run.
 - **The rename form's flex layout sits on an inner `<div>`**: Bootstrap's `.d-flex` uses `display: flex !important`, which would override the `hidden` attribute on the form itself.
+
+## 2026-11-24 (P1, built for Claire with the team's agreement)
+
+- **`/plan/<id>` lives in `pages.py`** (SPEC.md 7.1 lists it there); the template, CSS and JavaScript are Claire's. Drafts 404 for non-admins, like the facts page. The "Open in 3D" links now use `url_for('pages.plan', ...)`.
+- **`layout.html` gained a `main_class` block** (default `container py-4`) so the planner can use the full window width. Other pages are unchanged; a test checks the home page still has the container.
+- **Planner layout follows `docs/demo-reference.html`**: a 318 px tool panel on the left and the room filling the rest. Below 768 px the room goes on top (60% of the screen height) with the panel underneath.
+- **WebGL check looks for WebGL 2 only**, because three.js 0.170 dropped WebGL 1. If creating the renderer still fails, the same SPEC.md 8.8 message is shown.
+- **Render on demand**: a frame is drawn only when OrbitControls fires `change` (including while damping glides to a stop) or another module calls `requestRender()`. The scene costs nothing while idle.
+- **Panning is allowed but clamped**: the orbit centre can slide over the floor's bounding box and no further; target and camera move back together so the view angle doesn't jump (SPEC.md 8.2: "disable panning beyond the room"). Panning moves along the floor (`screenSpacePanning = false`), never up through the ceiling.
+- **`fitCamera(box)` backs the camera off until the box's bounding sphere fits in the 35° field of view** (+10%), viewing from the south-east and above so the north wall is at the back. It also sets the zoom limits and near/far planes from the room's size.
+- **The camera stops 0.05 rad above the horizon** (`maxPolarAngle`), so it can't look up from under the floor.
+- **Checked in headless Chrome** (screenshots at 1280 px and phone width). Headless Chrome won't make its window narrower than about 500 px, so the exact phone fit still needs a real browser's device mode.

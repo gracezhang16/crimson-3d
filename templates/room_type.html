@@ -56,8 +56,7 @@
             {% endif %}
         </div>
         <div class="card-footer bg-transparent">
-            {# /plan/<id> is served once the planner route exists (Claire, P1). #}
-            <a class="btn btn-crimson" href="/plan/{{ room_type.id }}">Open in 3D</a>
+            <a class="btn btn-crimson" href="{{ url_for('pages.plan', type_id=room_type.id) }}">Open in 3D</a>
         </div>
     </div>
 

@@ -407,3 +407,45 @@ def test_my_layouts_hides_layouts_of_draft_rooms(client):
     db.execute("UPDATE room_types SET status = 'draft' WHERE name = 'Single (sample)'")
     log_in(client, me)
     assert "Hidden for now" not in client.get("/layouts").get_data(as_text=True)
+
+
+# --- Planner page (P1) -------------------------------------------------------
+
+def test_plan_page_passes_settings_as_data_attributes(client):
+    single = type_id("Single (sample)")
+    response = client.get(f"/plan/{single}")
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    assert f'data-type-id="{single}"' in page
+    assert 'data-layout-id=""' in page
+    assert 'data-mode="edit"' in page
+    assert 'data-logged-in="false"' in page
+    assert '<canvas id="scene"' in page
+    assert "/static/js/planner/main.js" in page
+    assert "/static/css/planner.css" in page
+    assert '"three": "/static/vendor/three/three.module.js"' in page   # import map
+
+
+def test_plan_page_knows_when_logged_in(client):
+    log_in(client, add_user())
+    page = client.get(f"/plan/{type_id('Single (sample)')}").get_data(as_text=True)
+    assert 'data-logged-in="true"' in page
+
+
+def test_plan_page_404s(client):
+    assert client.get("/plan/9999").status_code == 404
+    single = type_id("Single (sample)")
+    db.execute("UPDATE room_types SET status = 'draft' WHERE id = ?", single)
+    assert client.get(f"/plan/{single}").status_code == 404
+
+
+def test_plan_page_shows_drafts_to_admins(client):
+    single = type_id("Single (sample)")
+    db.execute("UPDATE room_types SET status = 'draft' WHERE id = ?", single)
+    admin_id = db.execute("INSERT INTO users (email, hash, role) VALUES ('a@example.com', 'x', 'admin')")
+    log_in(client, admin_id)
+    assert client.get(f"/plan/{single}").status_code == 200
+
+
+def test_other_pages_keep_the_container(client):
+    assert '<main class="container py-4 flex-grow-1">' in client.get("/").get_data(as_text=True)
