@@ -2,13 +2,17 @@
  * Planner entry point (SPEC.md 8.1): read the page's data-* attributes, load
  * the room, build the scene and wire the modules together.
  *
- * P3: the room's floor, walls (with dollhouse stubs), wall features, door
- * zones and wall labels, loaded from /api/types/<id>. Furniture arrives in P4.
+ * P4: the room (floor, walls with dollhouse stubs, wall features, door zones,
+ * wall labels) and its default furniture, loaded from /api/types/<id> and
+ * /api/furniture. Moving furniture arrives in P5.
  */
 
 import { apiFetch } from "../shared/api.js";
+import * as THREE from "three";
+import { makeFurniture } from "./furniture.js";
 import { createWallLabels } from "./labels.js";
 import { buildRoom } from "./room.js";
+import { itemDimensions } from "./rules.js";
 import { createScene, webglAvailable } from "./scene.js";
 
 const NO_WEBGL_MESSAGE =
@@ -47,24 +51,52 @@ function showMessage(canvas, text) {
 }
 
 /**
- * Load the room type and draw it.
+ * Build a group holding every placed item. Items whose catalog entry no
+ * longer exists are skipped (with a console warning for developers).
+ *
+ * @param {object[]} placements - SPEC.md 4.4
+ * @param {Map<number, object>} catalogById
+ * @returns {THREE.Group}
+ */
+function buildFurniture(placements, catalogById) {
+  const group = new THREE.Group();
+  for (const placement of placements) {
+    const item = itemDimensions(placement, catalogById);
+    if (item) {
+      group.add(makeFurniture(placement, item));
+    } else {
+      console.warn("Skipping a placement whose furniture is no longer in the catalog:", placement);
+    }
+  }
+  return group;
+}
+
+/**
+ * Load the room type and the furniture catalog, then draw them.
  *
  * @param {HTMLCanvasElement} canvas
  * @param {{typeId: number}} config
  */
 async function start(canvas, config) {
   let roomType;
+  let catalog;
   try {
-    roomType = await apiFetch(`/api/types/${config.typeId}`);
+    // Promise.all starts both requests at once and waits for both to finish.
+    [roomType, catalog] = await Promise.all([
+      apiFetch(`/api/types/${config.typeId}`),
+      apiFetch("/api/furniture"),
+    ]);
   } catch (error) {
     showMessage(canvas, `Couldn't load this room: ${error.message}`);
     return;
   }
+  const catalogById = new Map(catalog.map((item) => [item.id, item]));
 
   const container = canvas.parentElement;
   const view = createScene(canvas);
   const room = buildRoom(roomType.geometry);
   view.scene.add(room.group);
+  view.scene.add(buildFurniture(roomType.default_layout.placements, catalogById));
 
   const labels = createWallLabels(container, room.walls);
   // Order matters: the room decides which walls are stubs, then the labels

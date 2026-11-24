@@ -207,3 +207,12 @@ Technical choices:
 - **Publish re-validates the saved geometry** and refuses with the first problem if it fails (SPEC.md 7.3). Publish and Unpublish are small POST forms outside the builder form, because forms can't be nested, and they act on the last *saved* version (the page says so).
 - **Preview in 3D opens `/plan/<id>` in a new tab**, which admins can see for drafts.
 - **A radiator's height placeholder says 24** (the default height), not a door's 80.
+
+## 2026-11-24 (P4, built for Claire with the team's agreement)
+
+- **The room type and the furniture catalog load together** (`Promise.all`), so the planner waits for one round trip, not two. The catalog is kept as a `Map` by id.
+- **Item sizes come from `rules.itemDimensions()`**: the catalog for catalog items, the placement itself for custom "will it fit" items (grey, no clearance). It's pure, in `rules.js`, because P7's collision rules need the same sizes. `footprint()` (SPEC.md 4.5 rule 1) and `footprintBox()` are there too, tested at all four rotations.
+- **Each item is a `THREE.Group` with its origin at the footprint's centre on the floor** (SPEC.md 8.4): moving it later only changes `position.x` and `position.z`. The placement and its size are kept on `group.userData` so P5 can find them from a click.
+- **Plan rotation is clockwise but three.js turns anticlockwise**, seen from above, so `rotation.y = -angle`. At rotation 0, width runs along plan x and depth along plan y, with the front facing south (SPEC.md 4.4).
+- **Labels are canvas textures laid on top of each box, along its longer side, with the text shrunk to fit.** They turn with their item but get an extra half turn when they'd otherwise read upside down from the usual south-east view (the double's wardrobes face north). They use a basic material, so lighting doesn't dim them, and don't write depth, so their transparent parts can't hide anything.
+- **A placement whose catalog item no longer exists is skipped with a console warning.** The server checks ids on save, so this only happens if an admin deletes a catalog item later.
