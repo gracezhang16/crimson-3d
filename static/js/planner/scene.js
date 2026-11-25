@@ -28,6 +28,11 @@ const MAX_POLAR_ANGLE = Math.PI / 2 - 0.05;
 // Where the camera sits relative to the room when fitted: to the south-east
 // and above, looking north-west (so the north wall is at the back).
 const VIEW_DIRECTION = new THREE.Vector3(0.55, 0.75, 1).normalize();
+// Floor plan view looks straight down. A hair of +z keeps OrbitControls
+// steady (exactly overhead it can't tell which way is up) and puts north at
+// the top of the screen.
+const PLAN_DIRECTION = new THREE.Vector3(0, 1, 0.0005).normalize();
+const VIEW_CHANGE_MS = 500;
 
 /**
  * Return true if this browser can run three.js. three.js 0.170 needs WebGL 2.
@@ -50,7 +55,9 @@ export function webglAvailable() {
  * @returns {{scene: THREE.Scene, camera: THREE.PerspectiveCamera,
  *   renderer: THREE.WebGLRenderer, controls: OrbitControls,
  *   requestRender: () => void, fitCamera: (box: THREE.Box3) => void,
- *   addFrameCallback: (callback: (camera: THREE.Camera) => void) => void}}
+ *   addFrameCallback: (callback: (camera: THREE.Camera) => void) => void,
+ *   setView: (mode: "3d" | "plan") => void, view: () => "3d" | "plan",
+ *   zoom: (factor: number) => void}}
  */
 export function createScene(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -135,7 +142,7 @@ export function createScene(canvas) {
     const distance = (radius / Math.sin(halfFov)) * 1.1;
 
     controls.target.copy(center); // orbit around the middle of the room, half way up
-    camera.position.copy(controls.target).addScaledVector(VIEW_DIRECTION, distance);
+    camera.position.copy(controls.target).addScaledVector(viewMode === "plan" ? PLAN_DIRECTION : VIEW_DIRECTION, distance);
     camera.near = distance / 100;
     camera.far = distance * 10;
     camera.updateProjectionMatrix();
@@ -152,7 +159,64 @@ export function createScene(canvas) {
     requestRender();
   }
 
-  return { scene, camera, renderer, controls, requestRender, fitCamera, addFrameCallback };
+  // --- 3D and floor plan views (SPEC.md 8.7) ----------------------------------
+  let viewMode = "3d";
+
+  /**
+   * Switch between the angled 3D view and the floor plan (straight down).
+   * The camera glides there by blending its direction from the room's
+   * centre, keeping its distance, unless the person has asked their system
+   * to reduce motion, in which case it jumps. Turning is off in floor plan
+   * view so it stays a plan; zooming and sliding still work.
+   *
+   * @param {"3d" | "plan"} mode
+   */
+  function setView(mode) {
+    viewMode = mode;
+    controls.enableRotate = mode === "3d";
+    const offset = camera.position.clone().sub(controls.target);
+    const distance = offset.length();
+    const from = offset.normalize();
+    const to = (mode === "plan" ? PLAN_DIRECTION : VIEW_DIRECTION).clone();
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion) {
+      camera.position.copy(controls.target).addScaledVector(to, distance);
+      controls.update();
+      requestRender();
+      return;
+    }
+    const startTime = performance.now();
+    function step(now) {
+      const t = Math.min(1, (now - startTime) / VIEW_CHANGE_MS);
+      const eased = t * t * (3 - 2 * t); // smoothstep: slow, faster, slow
+      const direction = from.clone().lerp(to, eased).normalize();
+      camera.position.copy(controls.target).addScaledVector(direction, distance);
+      controls.update();
+      requestRender();
+      if (t < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  /**
+   * Zoom by moving the camera towards (factor < 1) or away from (factor > 1)
+   * the point it orbits, within the same limits as the scroll wheel. For the
+   * + and - buttons (SPEC.md 8.7), for people without a scroll wheel.
+   *
+   * @param {number} factor
+   */
+  function zoom(factor) {
+    const offset = camera.position.clone().sub(controls.target);
+    const distance = THREE.MathUtils.clamp(offset.length() * factor, controls.minDistance, controls.maxDistance);
+    camera.position.copy(controls.target).addScaledVector(offset.normalize(), distance);
+    controls.update();
+    requestRender();
+  }
+
+  return {
+    scene, camera, renderer, controls, requestRender, fitCamera, addFrameCallback,
+    setView, view: () => viewMode, zoom,
+  };
 }
 
 /**

@@ -94,6 +94,31 @@
                 <h2 class="planner-heading">Things to buy</h2>
                 <div class="catalog-grid" id="catalog-purchase"></div>
             </section>
+            {# "Will it fit?" (SPEC.md 8.6): try any item by its size. panel.js checks
+               it (rules.checkCustomItem) and adds it as a custom item. #}
+            <section id="will-it-fit">
+                <h2 class="planner-heading">Will it fit?</h2>
+                <form id="custom-form" class="custom-grid" novalidate>
+                    <div class="custom-wide">
+                        <label for="custom-name" class="form-label small mb-0">Name</label>
+                        <input id="custom-name" class="form-control form-control-sm" maxlength="60" placeholder="e.g. Bean bag chair" autocomplete="off">
+                    </div>
+                    <div>
+                        <label for="custom-width" class="form-label small mb-0">Width (in)</label>
+                        <input id="custom-width" class="form-control form-control-sm" type="number" min="1" max="200" step="1" inputmode="numeric">
+                    </div>
+                    <div>
+                        <label for="custom-depth" class="form-label small mb-0">Depth (in)</label>
+                        <input id="custom-depth" class="form-control form-control-sm" type="number" min="1" max="200" step="1" inputmode="numeric">
+                    </div>
+                    <div>
+                        <label for="custom-height" class="form-label small mb-0">Height (in)</label>
+                        <input id="custom-height" class="form-control form-control-sm" type="number" min="1" max="120" step="1" inputmode="numeric">
+                    </div>
+                    <p id="custom-error" class="custom-wide small text-danger mb-0" role="alert" hidden></p>
+                    <button type="submit" class="btn btn-sm btn-crimson custom-wide">Add to the suite</button>
+                </form>
+            </section>
             <section>
                 <h2 class="planner-heading">In this suite <span id="room-item-count"></span></h2>
                 {# A button per item, so items can be selected with the keyboard too. #}
@@ -111,6 +136,18 @@
         <div class="planner-scene">
             {# main.js replaces this canvas with a message if WebGL is unavailable. #}
             <canvas id="scene" aria-label="3D view of the room"></canvas>
+            {# View controls (SPEC.md 8.7): 3D or floor plan, and zoom for people
+               without a scroll wheel. main.js wires them up. #}
+            <div class="scene-tools" role="toolbar" aria-label="View">
+                <div class="btn-group btn-group-sm" role="group" aria-label="View mode">
+                    <button type="button" class="btn btn-light" data-view="3d" aria-pressed="true">3D</button>
+                    <button type="button" class="btn btn-light" data-view="plan" aria-pressed="false">Floor plan</button>
+                </div>
+                <div class="btn-group btn-group-sm" role="group" aria-label="Zoom">
+                    <button type="button" class="btn btn-light" data-zoom="in" aria-label="Zoom in">+</button>
+                    <button type="button" class="btn btn-light" data-zoom="out" aria-label="Zoom out">−</button>
+                </div>
+            </div>
             {# "Everything fits" or "N items don't fit" (SPEC.md 4.5 rule 8); panel.js
                fills it, and screen readers announce changes. #}
             <div id="fit-status" class="fit-pill" role="status" aria-live="polite" hidden></div>

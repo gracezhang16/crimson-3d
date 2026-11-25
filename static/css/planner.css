@@ -222,3 +222,38 @@
     white-space: nowrap;
     pointer-events: none;
 }
+
+/* --- P8: view tools and "Will it fit?" ------------------------------------- */
+
+/* 3D / Floor plan and zoom buttons, over the top-right of the 3D view. */
+.scene-tools {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    gap: 8px;
+}
+
+.scene-tools .btn {
+    background: rgb(255 255 255 / 92%);
+    border-color: var(--c3-line);
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgb(15 13 16 / 10%);
+}
+
+.scene-tools .btn[aria-pressed="true"] {
+    background: var(--crimson);
+    border-color: var(--crimson);
+    color: #fff;
+}
+
+/* The "Will it fit?" form: name across the top, three sizes in a row. */
+.custom-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+}
+
+.custom-grid .custom-wide {
+    grid-column: 1 / -1;
+}

@@ -50,7 +50,9 @@ export function createLayout(geometry, catalogById, scene, requestRender) {
     entries.forEach((entry, i) => {
       entry.issue = issues[i];
       setIssueTint(entry.group, entry.issue !== null);
-      setLabelVisible(entry.group, entry === selected); // names show on the selected item only
+      // Names show on the selected item, and always on custom "will it fit"
+      // items, which are plain boxes that don't show what they are.
+      setLabelVisible(entry.group, entry === selected || entry.item.slug === null);
     });
     updateSelectionOutline(outlineMesh, selected);
     requestRender();
@@ -125,6 +127,18 @@ export function createLayout(geometry, catalogById, scene, requestRender) {
       const item = itemDimensions({ furniture_id: catalogItem.id }, catalogById);
       const spot = findFreeSpot(item, 0, outlines, blockers());
       selected = addEntry({ furniture_id: catalogItem.id, x: spot.x, y: spot.y, rotation: 0 });
+      changed(true);
+    },
+
+    /**
+     * Add a custom "will it fit" item (SPEC.md 4.4) at the first free spot,
+     * and select it.
+     * @param {{label: string, width: number, depth: number, height: number}} custom
+     */
+    addCustom(custom) {
+      const size = { ...custom, clearance: 0 };
+      const spot = findFreeSpot(size, 0, outlines, blockers());
+      selected = addEntry({ furniture_id: null, ...custom, x: spot.x, y: spot.y, rotation: 0 });
       changed(true);
     },
 

@@ -490,3 +490,34 @@ export function evaluate(geometry, entries) {
     return other >= 0 ? `Overlaps the ${lowerFirst(entries[other].item.name)}` : null;
   });
 }
+
+// --- P8: "Will it fit?" custom items ----------------------------------------------
+
+// The same limits the server applies (geometry.py, SPEC.md 4.4).
+const CUSTOM_MAX_LABEL = 60;
+const CUSTOM_MAX_SIZE = 200;
+const CUSTOM_MAX_HEIGHT = 120;
+
+/**
+ * Check the "Will it fit?" form: a name and a whole-inch width, depth and
+ * height within the server's limits.
+ *
+ * @param {{label: string, width: string, depth: string, height: string}} values - as typed
+ * @returns {{item: {label: string, width: number, depth: number, height: number} | null,
+ *   error: string | null}} the item ready to add, or the first problem in words
+ */
+export function checkCustomItem({ label, width, depth, height }) {
+  const name = (label ?? "").trim();
+  if (!name || name.length > CUSTOM_MAX_LABEL) {
+    return { item: null, error: `Give it a name of 1 to ${CUSTOM_MAX_LABEL} characters.` };
+  }
+  const sizes = {};
+  for (const [field, text, max] of [["width", width, CUSTOM_MAX_SIZE], ["depth", depth, CUSTOM_MAX_SIZE], ["height", height, CUSTOM_MAX_HEIGHT]]) {
+    const value = /^\s*\d+\s*$/.test(String(text ?? "")) ? Number(text) : NaN;
+    if (!Number.isInteger(value) || value < 1 || value > max) {
+      return { item: null, error: `The ${field} must be a whole number of inches from 1 to ${max}.` };
+    }
+    sizes[field] = value;
+  }
+  return { item: { label: name, ...sizes }, error: null };
+}

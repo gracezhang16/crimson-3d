@@ -27,7 +27,7 @@ const WALL_EDGE_COLOR = 0x9aa1ad;
  * @param {{ceiling: number, rooms: {outline: number[][], features: object[]}[]}} geometry
  *   - the suite format (version 2)
  * @returns {{group: THREE.Group, bounds: THREE.Box3, roomBounds: THREE.Box3[], walls: object[],
- *   update: (camera: THREE.Camera, focus?: number | null) => void}}
+ *   update: (camera: THREE.Camera, focus?: number | null, plan?: boolean) => void}}
  *   `walls` lists every room's walls; each has `mesh`, `length`, `top` (the
  *   3D point at the top centre of its inner face) and `isStub`. `roomBounds`
  *   has one box per room, for pointing the camera at a room. Call
@@ -60,14 +60,18 @@ export function buildRoom(geometry) {
    * can be seen into from anywhere. Radiators and door zones are on the
    * floor, so they always show.
    *
+   * In floor plan view (looking straight down) nothing hides anything, so
+   * every wall stands and the plan reads like a drawing.
+   *
    * @param {THREE.Camera} camera
    * @param {number | null} [focus] - index of the room in focus, or null for the whole suite
+   * @param {boolean} [plan] - true in floor plan view
    */
-  function update(camera, focus = null) {
+  function update(camera, focus = null, plan = false) {
     const cameraPlan = [camera.position.x, camera.position.z];
     rooms.forEach(({ outline, wallParts, features }, r) => {
       wallParts.forEach((part, i) => {
-        part.isStub = (focus !== null && r !== focus) || cameraOutsideWall(outline, i, cameraPlan);
+        part.isStub = !plan && ((focus !== null && r !== focus) || cameraOutsideWall(outline, i, cameraPlan));
         if (part.inside) {
           setWallHeight(part.pieces, part.isStub ? STUB_HEIGHT : ceiling);
           part.lintels.visible = !part.isStub;

@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 
 import {
-  evaluate, findFreeSpot, footprint, footprintBox, insideAnyRoom, insideRoom, itemDimensions,
+  checkCustomItem, evaluate, findFreeSpot, footprint, footprintBox, insideAnyRoom, insideRoom, itemDimensions,
   mayOverlap, overlaps, pointInPolygon, snap, zones,
 } from "../static/js/planner/rules.js";
 
@@ -359,4 +359,23 @@ test("a new item lands in the next room once the first is full", () => {
 test("snap flushes against the second room's walls too", () => {
   // Desk 42 wide: its west edge 2 in from the common room's west wall (x = 125).
   assert.deepEqual(snap({ x: 148, y: 60 }, DESK, 0, [BEDROOM, COMMON]), { x: 146, y: 60 });
+});
+
+
+// --- P8: "Will it fit?" ------------------------------------------------------------
+
+test("checkCustomItem accepts a named item in whole inches", () => {
+  assert.deepEqual(checkCustomItem({ label: " Bean bag chair ", width: "36", depth: "36", height: "28" }),
+    { item: { label: "Bean bag chair", width: 36, depth: 36, height: 28 }, error: null });
+});
+
+test("checkCustomItem explains the first problem", () => {
+  const ok = { label: "Shelf", width: "30", depth: "12", height: "60" };
+  assert.match(checkCustomItem({ ...ok, label: "  " }).error, /name of 1 to 60/);
+  assert.match(checkCustomItem({ ...ok, label: "x".repeat(61) }).error, /name of 1 to 60/);
+  assert.match(checkCustomItem({ ...ok, width: "0" }).error, /width .* 1 to 200/);
+  assert.match(checkCustomItem({ ...ok, depth: "12.5" }).error, /depth/);
+  assert.match(checkCustomItem({ ...ok, height: "121" }).error, /height .* 1 to 120/);
+  assert.match(checkCustomItem({ ...ok, width: "" }).error, /width/);
+  assert.equal(checkCustomItem({ ...ok, width: "200", height: "120" }).error, null);
 });

@@ -98,8 +98,9 @@ async function start(canvas, config) {
   const focus = createRoomFocus(roomType.geometry.rooms, room, view);
   // Order matters: the room decides which walls are stubs, then the labels
   // pick from the walls still standing.
+  attachViewTools(view);
   view.addFrameCallback((camera) => {
-    room.update(camera, focus.current());
+    room.update(camera, focus.current(), view.view() === "plan");
     labels.update(camera);
     roomLabels.update(camera);
   });
@@ -143,6 +144,23 @@ function createRoomFocus(rooms, room, view) {
   }
   render();
   return { current: () => focus };
+}
+
+/**
+ * The 3D / Floor plan switch and the zoom buttons over the 3D view.
+ * @param {ReturnType<typeof createScene>} view
+ */
+function attachViewTools(view) {
+  const modeButtons = document.querySelectorAll(".scene-tools [data-view]");
+  for (const button of modeButtons) {
+    button.addEventListener("click", () => {
+      view.setView(button.dataset.view);
+      modeButtons.forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+    });
+  }
+  for (const button of document.querySelectorAll(".scene-tools [data-zoom]")) {
+    button.addEventListener("click", () => view.zoom(button.dataset.zoom === "in" ? 0.8 : 1.25));
+  }
 }
 
 const plannerElement = document.querySelector("#planner");

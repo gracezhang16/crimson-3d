@@ -11,6 +11,7 @@
  */
 
 import { formatFeetInches } from "../shared/units.js";
+import { checkCustomItem } from "./rules.js";
 
 /**
  * Build one button with a name and a size line underneath, and optionally
@@ -81,6 +82,25 @@ export function createPanel(layout, catalog) {
     button.addEventListener("click", () => layout.addFromCatalog(item));
     document.querySelector(`#catalog-${item.category}`)?.append(button);
   }
+
+  // "Will it fit?": check the typed size, then add it as a custom item.
+  const customForm = document.querySelector("#custom-form");
+  const customError = document.querySelector("#custom-error");
+  customForm.addEventListener("submit", (event) => {
+    event.preventDefault(); // stay on the page
+    const { item, error } = checkCustomItem({
+      label: document.querySelector("#custom-name").value,
+      width: document.querySelector("#custom-width").value,
+      depth: document.querySelector("#custom-depth").value,
+      height: document.querySelector("#custom-height").value,
+    });
+    customError.hidden = !error;
+    customError.textContent = error ?? "";
+    if (item) {
+      layout.addCustom(item);
+      customForm.reset();
+    }
+  });
 
   document.querySelector("#rotate-button").addEventListener("click", () => {
     const entry = layout.selected();

@@ -357,3 +357,12 @@ Technical choices:
 - **Areas round halves up everywhere** (`sq_ft` filter): Python's built-in rounding sends 606.25 to 606.2 (to the even neighbour), while the builder's JavaScript shows 606.3; the facts and dorm pages now match the builder.
 - **SPEC.md sections 1, 5, 6, 7, 8, 9 and 10 updated for suites**, each change marked with its date. The old milestone rows are left as the history of what was built.
 - **End-to-end check in headless Chrome**: an admin adds suite B-21 of the two-bedroom type and assigns a registered student; the student's "My suite" opens that suite's planner; they move a desk from Bedroom A into the common room, save, log out, log in, and reopen the layout from My layouts with the desk where they left it.
+
+## 2026-11-25 (P8: floor plan view and "Will it fit?")
+
+- **Floor plan view keeps the perspective camera and looks straight down** (with a hair of tilt toward south, because OrbitControls can't tell which way is up when exactly overhead; this also puts north at the top). Turning is switched off in this view so it stays a plan; zoom and sliding still work. Every wall stands in floor plan view, since nothing can hide anything from directly above. Alternative: an orthographic camera (true plan, no perspective), which would mean a second camera and keeping the two in step.
+- **The view change glides for half a second** by blending the camera's direction from the room's centre (smoothstep easing), keeping its distance; with "reduce motion" switched on in the system, it jumps instead (SPEC.md 8.7).
+- **Zoom buttons** move the camera 20% closer or 25% further (so in-then-out returns to the start), within the scroll wheel's limits.
+- **"Will it fit?" is checked in the browser by `rules.checkCustomItem`** with the server's limits (name 1–60 characters, width and depth 1–200 in, height 1–120 in), showing the first problem in words. The server checks again on save (`validate_placements`).
+- **Custom items always show their name label**: they're plain grey boxes, so unlike shaped catalog furniture they don't show what they are.
+- **Checked end to end**: a 36 × 36 × 28 in "Bean bag chair" added through the form, moved with the arrow keys, saved, and back after a reload.
