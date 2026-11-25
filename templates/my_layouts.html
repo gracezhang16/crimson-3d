@@ -45,6 +45,15 @@
                                         <button type="button" class="btn btn-sm btn-outline-secondary" data-action="cancel">Cancel</button>
                                     </div>
                                 </form>
+                                {# The read-only link, while the layout is shared (layouts.js fills and clears it). #}
+                                <div class="share-box mt-1" {% if not layout.share_token %}hidden{% endif %}>
+                                    <label class="visually-hidden" for="share-{{ layout.id }}">Share link for {{ layout.name }}</label>
+                                    <div class="input-group input-group-sm">
+                                        <input id="share-{{ layout.id }}" class="form-control share-url" readonly
+                                               value="{{ url_for('pages.share', token=layout.share_token, _external=True) if layout.share_token else '' }}">
+                                        <button type="button" class="btn btn-outline-secondary" data-action="copy">Copy</button>
+                                    </div>
+                                </div>
                             </td>
                             <td>{{ layout.dorm_name }} · {{ layout.type_name }}</td>
                             <td class="text-end">{{ layout.item_count }}</td>
@@ -57,6 +66,10 @@
                             <td class="text-end text-nowrap">
                                 <a class="btn btn-sm btn-crimson"
                                    href="{{ url_for('pages.plan', type_id=layout.suite_type_id, layout=layout.id) }}">Open</a>
+                                <a class="btn btn-sm btn-outline-secondary"
+                                   href="{{ url_for('pages.shopping_list', layout_id=layout.id) }}">Shopping list</a>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-action="share"
+                                        aria-pressed="{{ 'true' if layout.share_token else 'false' }}">{{ "Stop sharing" if layout.share_token else "Share" }}</button>
                                 <button type="button" class="btn btn-sm btn-outline-secondary" data-action="rename">Rename</button>
                                 <button type="button" class="btn btn-sm btn-outline-danger" data-action="delete">Delete</button>
                             </td>

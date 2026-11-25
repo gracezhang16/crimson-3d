@@ -11,7 +11,7 @@
  */
 
 import { formatFeetInches } from "../shared/units.js";
-import { checkCustomItem } from "./rules.js";
+import { checkCustomItem, shoppingList } from "./rules.js";
 
 /**
  * Build one button with a name and a size line underneath, and optionally
@@ -141,4 +141,47 @@ export function createPanel(layout, catalog) {
 
   layout.onChange(() => refresh());
   refresh();
+}
+
+
+/**
+ * Keep the panel's shopping list (things to buy and custom items) up to
+ * date. Used in every mode, including the read-only share page.
+ *
+ * @param {ReturnType<import("./layout.js").createLayout>} layout
+ */
+export function createShoppingList(layout) {
+  const list = document.querySelector("#shopping-items");
+  function refresh() {
+    const items = shoppingList(layout.entries());
+    list.replaceChildren(...items.map((item) => {
+      const li = document.createElement("li");
+      li.textContent = `${item.name}${item.count > 1 ? ` × ${item.count}` : ""} · ${item.width} × ${item.depth} × ${item.height} in`;
+      return li;
+    }));
+    if (!items.length) {
+      const li = document.createElement("li");
+      li.className = "text-body-secondary";
+      li.textContent = "Nothing to buy yet: everything here is supplied by Harvard.";
+      list.append(li);
+    }
+  }
+  layout.onChange(refresh);
+  refresh();
+}
+
+/**
+ * The read-only item list for the share page: names and sizes, nothing to click.
+ *
+ * @param {ReturnType<import("./layout.js").createLayout>} layout
+ */
+export function createItemList(layout) {
+  const entries = layout.entries();
+  document.querySelector("#room-item-count").textContent = `(${entries.length})`;
+  document.querySelector("#room-items").replaceChildren(...entries.map((entry) => {
+    const li = document.createElement("li");
+    li.className = "small";
+    li.textContent = `${entry.item.name} · ${footprintText(entry.item)}`;
+    return li;
+  }));
 }

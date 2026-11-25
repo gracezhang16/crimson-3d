@@ -12,7 +12,7 @@ import { apiFetch } from "../shared/api.js";
 import { attachInteraction } from "./interaction.js";
 import { createRoomLabels, createWallLabels } from "./labels.js";
 import { createLayout } from "./layout.js";
-import { createPanel } from "./panel.js";
+import { createItemList, createPanel, createShoppingList } from "./panel.js";
 import { buildRoom } from "./room.js";
 import { createDefaultSaveControls, createSaveControls } from "./saving.js";
 import { createScene, webglAvailable } from "./scene.js";
@@ -25,16 +25,45 @@ const NO_WEBGL_MESSAGE =
  * data-type-id into dataset.typeId (dashes become camelCase).
  *
  * @param {HTMLElement} element
- * @returns {{typeId: number, layoutId: number | null, mode: string, loggedIn: boolean}}
+ * @returns {{typeId: number, layoutId: number | null, mode: string, loggedIn: boolean,
+ *   shareToken: string | null}}
  */
 function readConfig(element) {
-  const { typeId, layoutId, mode, loggedIn } = element.dataset;
+  const { typeId, layoutId, mode, loggedIn, shareToken } = element.dataset;
   return {
     typeId: Number(typeId),
     layoutId: layoutId ? Number(layoutId) : null,
-    mode, // "edit" | "view" | "admin-default"
+    mode, // "edit" | "view" (share page) | "admin-default"
     loggedIn: loggedIn === "true",
+    shareToken: shareToken || null,
   };
+}
+
+/**
+ * Load what the planner draws: the suite and the placements to start from.
+ * The share page reads one shared layout (/api/share/<token>); otherwise the
+ * suite type comes from /api/types/<id>, with a saved layout if one was asked
+ * for. The catalog is loaded alongside, in parallel (Promise.all).
+ *
+ * @returns {Promise<{geometry: object, placements: object[], catalog: object[],
+ *   saved: object | null}>}
+ */
+async function loadPlan(config) {
+  if (config.mode === "view") {
+    const [shared, catalog] = await Promise.all([
+      apiFetch(`/api/share/${config.shareToken}`),
+      apiFetch("/api/furniture"),
+    ]);
+    return { geometry: shared.geometry, placements: shared.placements, catalog, saved: null };
+  }
+  const [roomType, catalog, saved] = await Promise.all([
+    apiFetch(`/api/types/${config.typeId}`),
+    apiFetch("/api/furniture"),
+    config.layoutId ? apiFetch(`/api/layouts/${config.layoutId}`) : null,
+  ]);
+  // A saved layout if one was asked for, otherwise the suite's default.
+  const placements = saved ? saved.placements : roomType.default_layout.placements;
+  return { geometry: roomType.geometry, placements, catalog, saved };
 }
 
 /**
@@ -59,43 +88,40 @@ function showMessage(canvas, text) {
  * @param {{typeId: number}} config
  */
 async function start(canvas, config) {
-  let roomType;
-  let catalog;
-  let saved = null;
+  let plan;
   try {
-    // Promise.all starts the requests at once and waits for all of them.
-    [roomType, catalog, saved] = await Promise.all([
-      apiFetch(`/api/types/${config.typeId}`),
-      apiFetch("/api/furniture"),
-      config.layoutId ? apiFetch(`/api/layouts/${config.layoutId}`) : null,
-    ]);
+    plan = await loadPlan(config);
   } catch (error) {
-    showMessage(canvas, `Couldn't load this room: ${error.message}`);
+    showMessage(canvas, `Couldn't load this suite: ${error.message}`);
     return;
   }
+  const { geometry, placements, catalog, saved } = plan;
   const catalogById = new Map(catalog.map((item) => [item.id, item]));
 
   const container = canvas.parentElement;
   const view = createScene(canvas);
-  const room = buildRoom(roomType.geometry);
+  const room = buildRoom(geometry);
   view.scene.add(room.group);
 
-  const layout = createLayout(roomType.geometry, catalogById, view.scene, view.requestRender);
-  // A saved layout if one was asked for, otherwise the room's default.
-  layout.load(saved ? saved.placements : roomType.default_layout.placements);
-  if (config.mode !== "view") {
+  const layout = createLayout(geometry, catalogById, view.scene, view.requestRender);
+  layout.load(placements);
+  if (config.mode === "view") {
+    // Share page: look, don't touch (SPEC.md 8.1). No picking or dragging.
+    createItemList(layout);
+  } else {
     attachInteraction({ canvas, camera: view.camera, controls: view.controls, layout });
     createPanel(layout, catalog);
   }
+  createShoppingList(layout);
   if (config.mode === "edit" && config.loggedIn) {
-    createSaveControls(config, layout, saved ? saved.name : "My layout");
+    createSaveControls(config, layout, saved ? saved.name : "My layout", saved?.share_url ?? null);
   } else if (config.mode === "admin-default") {
     createDefaultSaveControls(config, layout);
   }
 
   const labels = createWallLabels(container, room.walls);
-  const roomLabels = createRoomLabels(container, roomType.geometry.rooms);
-  const focus = createRoomFocus(roomType.geometry.rooms, room, view);
+  const roomLabels = createRoomLabels(container, geometry.rooms);
+  const focus = createRoomFocus(geometry.rooms, room, view);
   // Order matters: the room decides which walls are stubs, then the labels
   // pick from the walls still standing.
   attachViewTools(view);

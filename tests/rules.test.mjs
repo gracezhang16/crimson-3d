@@ -8,7 +8,7 @@ import { readFileSync, readdirSync } from "node:fs";
 
 import {
   checkCustomItem, evaluate, findFreeSpot, footprint, footprintBox, insideAnyRoom, insideRoom, itemDimensions,
-  mayOverlap, overlaps, pointInPolygon, snap, zones,
+  mayOverlap, overlaps, pointInPolygon, shoppingList, snap, zones,
 } from "../static/js/planner/rules.js";
 
 // 114 × 150 rectangle, clockwise from the top-left: walls 0 N, 1 E, 2 S, 3 W.
@@ -378,4 +378,20 @@ test("checkCustomItem explains the first problem", () => {
   assert.match(checkCustomItem({ ...ok, height: "121" }).error, /height .* 1 to 120/);
   assert.match(checkCustomItem({ ...ok, width: "" }).error, /width/);
   assert.equal(checkCustomItem({ ...ok, width: "200", height: "120" }).error, null);
+});
+
+
+// --- S7: shopping list --------------------------------------------------------------
+
+test("shoppingList lists things to buy and custom items, grouped, not Harvard furniture", () => {
+  const entry = (name, category, width = 20, depth = 20, height = 30) => ({ item: { name, category, width, depth, height } });
+  const list = shoppingList([
+    entry("Bed, twin XL", "harvard"),
+    entry("Mini fridge", "purchase"),
+    entry("Storage bin", "purchase", 24, 16, 13),
+    entry("Storage bin", "purchase", 24, 16, 13),
+    entry("Bean bag chair", "custom", 36, 36, 28),
+  ]);
+  assert.deepEqual(list.map((i) => [i.name, i.count, i.custom]),
+    [["Mini fridge", 1, false], ["Storage bin", 2, false], ["Bean bag chair", 1, true]]);
 });

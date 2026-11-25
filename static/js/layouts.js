@@ -1,6 +1,6 @@
 /**
- * My layouts page (templates/my_layouts.html): rename and delete layouts
- * through the layouts API, and show "last saved" times in local time.
+ * My layouts page (templates/my_layouts.html): rename, delete and share
+ * layouts through the layouts API, and show "last saved" times in local time.
  *
  * Uses one click listener and one submit listener on the whole table instead
  * of one per button ("event delegation"): each event says which element was
@@ -102,6 +102,43 @@ async function deleteLayout(row) {
   }
 }
 
+/**
+ * Share a layout (POST) or stop sharing it (DELETE), then show or hide its link.
+ *
+ * @param {HTMLTableRowElement} row
+ * @param {HTMLButtonElement} button
+ */
+async function toggleSharing(row, button) {
+  const shared = button.getAttribute("aria-pressed") === "true";
+  const url = `/api/layouts/${row.dataset.layoutId}/share`;
+  try {
+    const result = await apiFetch(url, { method: shared ? "DELETE" : "POST" });
+    const box = row.querySelector(".share-box");
+    box.hidden = shared;
+    row.querySelector(".share-url").value = shared ? "" : result.share_url;
+    button.setAttribute("aria-pressed", String(!shared));
+    button.textContent = shared ? "Share" : "Stop sharing";
+    showStatus(shared ? "Sharing stopped: the old link no longer works." : "Anyone with the link can now see this layout (read-only).", "success");
+  } catch (error) {
+    showStatus(error.message, "danger");
+  }
+}
+
+/**
+ * Copy a share link to the clipboard.
+ * @param {HTMLTableRowElement} row
+ */
+async function copyLink(row) {
+  const input = row.querySelector(".share-url");
+  try {
+    await navigator.clipboard.writeText(input.value);
+    showStatus("Link copied.", "success");
+  } catch {
+    input.select(); // clipboard blocked: select it so Ctrl/Cmd+C works
+    showStatus("Press Ctrl+C (or Cmd+C) to copy the selected link.", "success");
+  }
+}
+
 // The table only exists when the student has at least one layout.
 if (table) {
   table.querySelectorAll("time[datetime]").forEach(showLocalTime);
@@ -118,6 +155,10 @@ if (table) {
       setEditing(row, false);
     } else if (button.dataset.action === "delete") {
       deleteLayout(row);
+    } else if (button.dataset.action === "share") {
+      toggleSharing(row, button);
+    } else if (button.dataset.action === "copy") {
+      copyLink(row);
     }
   });
 

@@ -271,7 +271,7 @@ def my_layouts():
     back to draft are hidden, as in the API (see docs/decisions.md, S5).
     """
     layouts = db.execute(
-        "SELECT layouts.id, layouts.name, layouts.updated, layouts.suite_type_id, "
+        "SELECT layouts.id, layouts.name, layouts.updated, layouts.suite_type_id, layouts.share_token, "
         "suite_types.name AS type_name, dorms.name AS dorm_name, "
         "COUNT(placements.id) AS item_count "
         "FROM layouts "
@@ -283,6 +283,64 @@ def my_layouts():
         session["user_id"], int(viewer_is_admin()),
     )
     return render_template("my_layouts.html", layouts=layouts)
+
+
+@pages.route("/share/<token>")
+def share(token):
+    """The read-only planner for a shared layout (SPEC.md 8.1 "view" mode).
+
+    Anyone with the link may look: the camera moves, the furniture doesn't.
+    The planner loads the layout itself from /api/share/<token>.
+    """
+    rows = db.execute(
+        "SELECT layouts.name AS layout_name, suite_types.id, suite_types.name, suite_types.status, "
+        "dorms.id AS dorm_id, dorms.name AS dorm_name "
+        "FROM layouts JOIN suite_types ON suite_types.id = layouts.suite_type_id "
+        "JOIN dorms ON dorms.id = suite_types.dorm_id "
+        "WHERE layouts.share_token = ? AND suite_types.status = 'published'",
+        token,
+    )
+    if not rows:
+        return apology("This share link doesn't work any more. Its owner may have stopped sharing it.", 404)
+    return render_template(
+        "plan.html", suite_type=rows[0], layout_id="", mode="view",
+        share_token=token, layout_name=rows[0]["layout_name"],
+    )
+
+
+@pages.route("/layouts/<int:layout_id>/shopping-list")
+@login_required
+def shopping_list(layout_id):
+    """The things to buy in one of the student's layouts (SPEC.md 7.1).
+
+    Everything not supplied by Harvard: catalog items in the "purchase"
+    category and custom "will it fit" items, grouped with a quantity.
+    """
+    layouts = db.execute(
+        "SELECT layouts.id, layouts.name, layouts.user_id, layouts.suite_type_id, "
+        "suite_types.name AS type_name, dorms.name AS dorm_name "
+        "FROM layouts JOIN suite_types ON suite_types.id = layouts.suite_type_id "
+        "JOIN dorms ON dorms.id = suite_types.dorm_id WHERE layouts.id = ?",
+        layout_id,
+    )
+    if not layouts:
+        return apology("We couldn't find that layout.", 404)
+    if layouts[0]["user_id"] != session["user_id"]:
+        return apology("That layout belongs to someone else.", 403)
+    items = db.execute(
+        "SELECT COALESCE(furniture.name, placements.label) AS name, "
+        "COALESCE(furniture.width, placements.width) AS width, "
+        "COALESCE(furniture.depth, placements.depth) AS depth, "
+        "COALESCE(furniture.height, placements.height) AS height, "
+        "placements.furniture_id IS NULL AS custom, COUNT(*) AS quantity "
+        "FROM placements LEFT JOIN furniture ON furniture.id = placements.furniture_id "
+        "WHERE placements.layout_id = ? AND (placements.furniture_id IS NULL OR furniture.category = 'purchase') "
+        # Group by position (the five columns above): the names width, depth
+        # and height exist in both tables, so naming them here is ambiguous.
+        "GROUP BY 1, 2, 3, 4, 5 ORDER BY 5, 1",
+        layout_id,
+    )
+    return render_template("shopping_list.html", layout=layouts[0], items=items)
 
 
 # ---------------------------------------------------------------------------

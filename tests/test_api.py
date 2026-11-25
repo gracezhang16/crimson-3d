@@ -456,3 +456,63 @@ def test_delete_removes_layout_and_placements(client, single):
     assert response.get_json() == {"ok": True}
     assert client.get(f"/api/layouts/{layout_id}").status_code == 404
     assert placement_count() == before   # ON DELETE CASCADE removed them
+
+
+# --- Sharing (S7) -------------------------------------------------------------------
+
+def test_share_link_round_trip(client, single):
+    log_in(client)
+    layout_id = create(client, single, placements=[BED, BEAN_BAG]).get_json()["id"]
+
+    first = client.post(f"/api/layouts/{layout_id}/share")
+    assert first.status_code == 200
+    share_url = first.get_json()["share_url"]
+    assert share_url.startswith("http://localhost/share/")
+    token = share_url.rsplit("/", 1)[1]
+    assert len(token) >= 20                                   # token_urlsafe(16)
+    # Sharing again keeps the same link, and the layout knows it.
+    assert client.post(f"/api/layouts/{layout_id}/share").get_json()["share_url"] == share_url
+    assert client.get(f"/api/layouts/{layout_id}").get_json()["share_url"] == share_url
+
+    client.get("/logout")
+    shared = client.get(f"/api/share/{token}")
+    assert shared.status_code == 200
+    data = shared.get_json()
+    assert set(data) == {"name", "type_id", "geometry", "placements"}
+    assert data["type_id"] == single and data["geometry"]["version"] == 2
+    assert len(data["placements"]) == 2
+    assert client.get(f"/share/{token}").status_code == 200   # the read-only page
+
+
+def test_stop_sharing_breaks_the_link(client, single):
+    log_in(client)
+    layout_id = create(client, single).get_json()["id"]
+    token = client.post(f"/api/layouts/{layout_id}/share").get_json()["share_url"].rsplit("/", 1)[1]
+    response = client.delete(f"/api/layouts/{layout_id}/share")
+    assert response.get_json() == {"ok": True}
+    assert client.get(f"/api/share/{token}").status_code == 404
+    assert client.get(f"/share/{token}").status_code == 404
+    assert client.get(f"/api/layouts/{layout_id}").get_json()["share_url"] is None
+
+
+def test_only_the_owner_can_share(client, single):
+    log_in(client, email="owner@example.com")
+    layout_id = create(client, single).get_json()["id"]
+    log_in(client, email="other@example.com")
+    assert client.post(f"/api/layouts/{layout_id}/share").status_code == 403
+    assert client.delete(f"/api/layouts/{layout_id}/share").status_code == 403
+    client.get("/logout")
+    assert client.post(f"/api/layouts/{layout_id}/share").status_code == 401
+
+
+def test_shared_link_to_a_draft_suite_is_404(client, single):
+    log_in(client)
+    layout_id = create(client, single).get_json()["id"]
+    token = client.post(f"/api/layouts/{layout_id}/share").get_json()["share_url"].rsplit("/", 1)[1]
+    db.execute("UPDATE suite_types SET status = 'draft' WHERE id = ?", single)
+    assert client.get(f"/api/share/{token}").status_code == 404
+
+
+def test_unknown_share_token_is_404(client):
+    assert client.get("/api/share/not-a-real-token").status_code == 404
+    assert "doesn&#39;t work any more" in client.get("/share/not-a-real-token").get_data(as_text=True)

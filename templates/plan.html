@@ -18,6 +18,7 @@
          data-type-id="{{ suite_type.id }}"
          data-layout-id="{{ layout_id }}"
          data-mode="{{ mode }}"
+         data-share-token="{{ share_token or '' }}"
          data-logged-in="{{ 'true' if user else 'false' }}">
 
         <aside class="planner-panel">
@@ -31,7 +32,15 @@
             {# Layout controls (SPEC.md 8.6), placed near the top so Save is in view
                without scrolling the panel. saving.js wires them up. #}
             <section id="layout-controls">
-                {% if mode == "admin-default" %}
+                {% if mode == "view" %}
+                    {# Share page: read-only (SPEC.md 8.1). #}
+                    <h2 class="planner-heading">Shared layout</h2>
+                    <p class="mb-0 fw-semibold">{{ layout_name }}</p>
+                    <p class="small text-body-secondary mb-0">
+                        Read-only: turn and zoom to look around.
+                        <a href="{{ url_for('pages.plan', type_id=suite_type.id) }}">Plan this suite yourself</a>.
+                    </p>
+                {% elif mode == "admin-default" %}
                     <h2 class="planner-heading">Default layout</h2>
                     <p class="small text-body-secondary mb-1">Visitors see this arrangement first when they open the room.</p>
                     <div class="d-flex align-items-center gap-2">
@@ -51,6 +60,19 @@
                     <p id="save-error" class="small text-danger mb-0" role="alert" hidden></p>
                     <p class="small mb-0 mt-1">Your layouts for this room:</p>
                     <ul class="small mb-0 ps-3" id="saved-layouts"></ul>
+                    {# Sharing (S7), once the layout is saved. saving.js shows it. #}
+                    <div id="share-controls" class="mt-2" hidden>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="share-button">Share a read-only link</button>
+                        <div id="share-link" hidden>
+                            <label for="share-url" class="form-label small mb-0">Anyone with this link can look (not change):</label>
+                            <div class="input-group input-group-sm">
+                                <input id="share-url" class="form-control" readonly>
+                                <button type="button" class="btn btn-outline-secondary" id="copy-share">Copy</button>
+                            </div>
+                            <button type="button" class="btn btn-link btn-sm text-danger p-0" id="stop-sharing">Stop sharing</button>
+                        </div>
+                        <a class="small d-inline-block mt-1" id="shopping-list-link" href="#">Printable shopping list</a>
+                    </div>
                 {% else %}
                     <h2 class="planner-heading">Your layout</h2>
                     <p class="small mb-0">
@@ -71,6 +93,7 @@
                 </p>
             </section>
 
+            {% if mode != "view" %}
             {# Filled by panel.js. Hidden until an item is selected. #}
             <section id="selection" hidden>
                 <h2 class="planner-heading">Selected</h2>
@@ -119,10 +142,16 @@
                     <button type="submit" class="btn btn-sm btn-crimson custom-wide">Add to the suite</button>
                 </form>
             </section>
+            {% endif %}
             <section>
                 <h2 class="planner-heading">In this suite <span id="room-item-count"></span></h2>
                 {# A button per item, so items can be selected with the keyboard too. #}
                 <ul class="list-unstyled mb-0 room-items" id="room-items"></ul>
+            </section>
+            {# Things to buy in this layout (SPEC.md 8.6); panel.js keeps it up to date. #}
+            <section>
+                <h2 class="planner-heading">Shopping list</h2>
+                <ul class="small mb-0 ps-3" id="shopping-items"></ul>
             </section>
             <section>
                 <h2 class="planner-heading">Moving around</h2>

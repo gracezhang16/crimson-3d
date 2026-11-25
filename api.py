@@ -6,8 +6,9 @@ and gets JSON back instead of an HTML page.
 """
 
 import json
+import secrets
 
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, jsonify, request, session, url_for
 
 from helpers import (VISIBLE_TYPE, api_login_required, db, insert_placements, json_error,
                      placements_error, run_in_transaction, viewer_is_admin)
@@ -165,9 +166,10 @@ def owned_layout(layout_id):
 def share_url(token):
     """Return the full share link for a token, or None if the layout isn't shared.
 
-    S7 adds the /share/<token> page and switches this to url_for().
+    _external=True makes url_for() include the scheme and host
+    ("http://127.0.0.1:5000/share/..."), so the link works when pasted anywhere.
     """
-    return f"{request.host_url}share/{token}" if token else None
+    return url_for("pages.share", token=token, _external=True) if token else None
 
 
 @api.route("/layouts")
@@ -292,3 +294,61 @@ def delete_layout(layout_id):
         return error
     db.execute("DELETE FROM layouts WHERE id = ?", layout_id)
     return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Sharing (S7): a read-only link anyone can open, until the owner stops it
+# ---------------------------------------------------------------------------
+
+@api.route("/layouts/<int:layout_id>/share", methods=["POST"])
+@api_login_required
+def share_layout(layout_id):
+    """Turn sharing on: create the layout's share token if it has none.
+
+    The token comes from secrets.token_urlsafe(16): 16 random bytes, about
+    22 characters, far too many to guess (SPEC.md 12). Sharing again returns
+    the same link. There is no request body, so no JSON is required.
+    """
+    layout, error = owned_layout(layout_id)
+    if error:
+        return error
+    token = layout["share_token"]
+    if not token:
+        token = secrets.token_urlsafe(16)
+        db.execute("UPDATE layouts SET share_token = ? WHERE id = ?", token, layout_id)
+    return jsonify({"share_url": share_url(token)})
+
+
+@api.route("/layouts/<int:layout_id>/share", methods=["DELETE"])
+@api_login_required
+def stop_sharing(layout_id):
+    """Turn sharing off: forget the token, so the old link stops working."""
+    layout, error = owned_layout(layout_id)
+    if error:
+        return error
+    db.execute("UPDATE layouts SET share_token = NULL WHERE id = ?", layout_id)
+    return jsonify({"ok": True})
+
+
+@api.route("/share/<token>")
+def get_shared_layout(token):
+    """A shared layout, for anyone with the link: {name, type_id, geometry, placements}.
+
+    A link to a suite type that has gone back to draft gives the same 404 as
+    an unknown or withdrawn link.
+    """
+    rows = db.execute(
+        "SELECT layouts.id, layouts.name, layouts.suite_type_id, suite_types.geometry "
+        "FROM layouts JOIN suite_types ON suite_types.id = layouts.suite_type_id "
+        "WHERE layouts.share_token = ? AND suite_types.status = 'published'",
+        token,
+    )
+    if not rows:
+        return json_error("This share link doesn't work any more.", 404)
+    layout = rows[0]
+    return jsonify({
+        "name": layout["name"],
+        "type_id": layout["suite_type_id"],
+        "geometry": json.loads(layout["geometry"]),
+        "placements": layout_placements(layout["id"]),
+    })

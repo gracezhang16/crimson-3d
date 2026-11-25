@@ -366,3 +366,14 @@ Technical choices:
 - **"Will it fit?" is checked in the browser by `rules.checkCustomItem`** with the server's limits (name 1–60 characters, width and depth 1–200 in, height 1–120 in), showing the first problem in words. The server checks again on save (`validate_placements`).
 - **Custom items always show their name label**: they're plain grey boxes, so unlike shaped catalog furniture they don't show what they are.
 - **Checked end to end**: a 36 × 36 × 28 in "Bean bag chair" added through the form, moved with the arrow keys, saved, and back after a reload.
+
+## 2026-11-25 (S7 + P9: share links, shopping list, read-only view)
+
+- **Share links are random tokens** (`secrets.token_urlsafe(16)`, about 128 bits), not layout ids, so nobody can guess someone else's link. Sharing again reuses the same token. "Stop sharing" sets it back to NULL, so the old link stops working for good. Sharing again later gives a new link.
+- **Share POST and DELETE take no JSON body.** The layout id in the URL is all they need, and the server checks ownership as on every other layout route.
+- **A share link to a draft (unpublished) suite gives 404**, the same as an unknown token, so drafts never show up outside the admin pages.
+- **The shared view is the normal planner page with `mode="view"`**: the same scene, Rooms picker, 3D/floor-plan toggle and zoom, but no picking, dragging, catalog or saving. The panel lists the items and the shopping list. Alternative: a separate viewer page, which would have meant a second copy of the scene code.
+- **The shopping list shows things to buy and custom items, grouped by name and size with a count.** Harvard furniture is left out because Harvard supplies it. It appears in two places: live in the planner panel (`rules.shoppingList`, tested under node) and on a printable page (`/layouts/<id>/shopping-list`, owner only, grouped in SQL).
+- **Shopping-list ticks aren't saved**: they're a checklist for one shopping trip, and saving them would need a new table for little gain.
+- **The SQL groups by column position** (`GROUP BY 1, 2, 3, 4, 5`) because `width`, `depth` and `height` exist in both `furniture` and `placements`, so naming them there is ambiguous.
+- **Checked end to end**: a student saves a layout with two mini fridges and a custom floor cushion, shares it, and opens the link logged out. They see all 15 items read-only, and clicking selects nothing. After "Stop sharing" on My layouts, the old link shows "This share link doesn't work any more."

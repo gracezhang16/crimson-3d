@@ -1,0 +1,48 @@
+{% extends "layout.html" %}
+
+{% block title %}Shopping list · {{ layout.name }}{% endblock %}
+
+{% block main %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('pages.my_layouts') }}">My layouts</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('pages.plan', type_id=layout.suite_type_id, layout=layout.id) }}">{{ layout.name }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Shopping list</li>
+        </ol>
+    </nav>
+
+    <h1 class="h3 mb-1">Shopping list</h1>
+    <p class="text-body-secondary mb-4">
+        {{ layout.name }} · {{ layout.dorm_name }}, {{ layout.type_name }}.
+        Harvard supplies the bed, desk, chair, dresser, bookcase, lamp and (where there's no closet) a wardrobe,
+        so they're not listed here.
+    </p>
+
+    {% if items %}
+        <div class="narrow-card">
+            <ul class="list-group mb-3">
+                {% for item in items %}
+                    <li class="list-group-item d-flex align-items-start gap-3">
+                        {# Ticks are for you while shopping; they aren't saved. #}
+                        <input class="form-check-input mt-1 flex-shrink-0" type="checkbox" id="item-{{ loop.index }}">
+                        <label class="flex-grow-1" for="item-{{ loop.index }}">
+                            <span class="fw-semibold">{{ item.name }}</span>
+                            {% if item.quantity > 1 %}<span class="text-body-secondary">× {{ item.quantity }}</span>{% endif %}
+                            {% if item.custom %}<span class="badge text-bg-light border ms-1">your own size</span>{% endif %}
+                            <span class="d-block small text-body-secondary">
+                                {{ item.width | feet_inches }} wide × {{ item.depth | feet_inches }} deep × {{ item.height | feet_inches }} tall
+                                ({{ item.width }} × {{ item.depth }} × {{ item.height }} in)
+                            </span>
+                        </label>
+                    </li>
+                {% endfor %}
+            </ul>
+            <p class="small text-body-secondary">
+                Tick items off as you buy them (ticks aren't saved). To print the list, use your browser's Print command.
+                Measure big purchases against your own room: rooms of the same type can differ by a few inches.
+            </p>
+        </div>
+    {% else %}
+        <p>Nothing to buy: this layout only uses furniture Harvard supplies. Add things to buy in the planner.</p>
+    {% endif %}
+{% endblock %}

@@ -58,8 +58,9 @@ export function nameForCopy(typed, savedName) {
  * @param {{typeId: number, layoutId: number | null}} config
  * @param {ReturnType<import("./layout.js").createLayout>} layout
  * @param {string} name - the open layout's name ("My layout" for a new one)
+ * @param {string | null} [sharedUrl] - its share link, if it is shared
  */
-export function createSaveControls(config, layout, name) {
+export function createSaveControls(config, layout, name, sharedUrl = null) {
   const nameInput = document.querySelector("#layout-name");
   const saveButton = document.querySelector("#save-button");
   const saveAsNewButton = document.querySelector("#save-as-new-button");
@@ -71,6 +72,7 @@ export function createSaveControls(config, layout, name) {
   let savedName = layoutId ? name : null;
   let dirty = false;
   nameInput.value = name;
+  const sharing = createShareControls(() => layoutId, error, sharedUrl);
 
   function setDirty(value) {
     dirty = value;
@@ -114,6 +116,7 @@ export function createSaveControls(config, layout, name) {
       }
       nameInput.value = savedName = newName;
       setDirty(false);
+      sharing.refresh(asNew); // a new layout starts unshared
       status.className = "small text-success";
       status.textContent = "Saved";
       refreshList();
@@ -161,6 +164,63 @@ export function createSaveControls(config, layout, name) {
   });
   setDirty(false);
   refreshList();
+  sharing.refresh(false);
+}
+
+/**
+ * The Share controls (S7) under the save buttons, shown once the layout is
+ * saved: share a read-only link, copy it, stop sharing, and a link to the
+ * printable shopping list.
+ *
+ * @param {() => number | null} currentId - the open layout's id, if saved
+ * @param {HTMLElement} error - where problems are shown
+ * @param {string | null} sharedUrl - the share link if already shared
+ * @returns {{refresh: (reset: boolean) => void}} call after saving
+ */
+function createShareControls(currentId, error, sharedUrl) {
+  const box = document.querySelector("#share-controls");
+  const shareButton = document.querySelector("#share-button");
+  const linkBox = document.querySelector("#share-link");
+  const urlInput = document.querySelector("#share-url");
+  let url = sharedUrl;
+
+  function render() {
+    const id = currentId();
+    box.hidden = !id;
+    shareButton.hidden = Boolean(url);
+    linkBox.hidden = !url;
+    urlInput.value = url ?? "";
+    document.querySelector("#shopping-list-link").href = id ? `/layouts/${id}/shopping-list` : "#";
+  }
+
+  async function call(method) {
+    error.hidden = true;
+    try {
+      const result = await apiFetch(`/api/layouts/${currentId()}/share`, { method });
+      url = method === "POST" ? result.share_url : null;
+      render();
+    } catch (problem) {
+      error.textContent = problem.message;
+      error.hidden = false;
+    }
+  }
+
+  shareButton.addEventListener("click", () => call("POST"));
+  document.querySelector("#stop-sharing").addEventListener("click", () => call("DELETE"));
+  document.querySelector("#copy-share").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(urlInput.value);
+    } catch {
+      urlInput.select(); // clipboard blocked: select it so Ctrl/Cmd+C works
+    }
+  });
+
+  return {
+    refresh(reset) {
+      if (reset) url = null;
+      render();
+    },
+  };
 }
 
 /**

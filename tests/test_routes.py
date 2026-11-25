@@ -498,3 +498,56 @@ def test_sq_ft_rounds_halves_up_like_the_builder():
     assert sq_ft(606.25) == "606.3"
     assert sq_ft(118.75) == "118.8"
     assert sq_ft(192) == "192.0"
+
+
+# --- Share page and shopping list (S7) ------------------------------------------
+
+def shared_layout(user_id, type_name="Single (sample)"):
+    """A layout with a bed, two storage bins, a fridge and a custom bean bag, shared."""
+    layout_id = add_layout(user_id, type_name, "Shopping test", placements=0)
+    ids = {r["slug"]: r["id"] for r in db.execute("SELECT id, slug FROM furniture")}
+    for slug in ("bed-twin-xl", "storage-bin", "storage-bin", "mini-fridge"):
+        db.execute("INSERT INTO placements (layout_id, furniture_id, x, y) VALUES (?, ?, 50, 50)", layout_id, ids[slug])
+    db.execute(
+        "INSERT INTO placements (layout_id, furniture_id, label, width, depth, height, x, y) "
+        "VALUES (?, NULL, 'Bean bag chair', 36, 36, 28, 50, 50)", layout_id,
+    )
+    db.execute("UPDATE layouts SET share_token = 'test-token-123' WHERE id = ?", layout_id)
+    return layout_id
+
+
+def test_share_page_is_the_planner_in_view_mode(client):
+    shared_layout(add_user())
+    page = client.get("/share/test-token-123").get_data(as_text=True)
+    assert 'data-mode="view"' in page and 'data-share-token="test-token-123"' in page
+    assert "Shared layout" in page and "Shopping test" in page
+    assert 'id="custom-form"' not in page and 'id="catalog-harvard"' not in page   # nothing to edit
+
+
+def test_shopping_list_lists_things_to_buy_not_harvard_furniture(client):
+    me = add_user()
+    layout_id = shared_layout(me)
+    log_in(client, me)
+    page = client.get(f"/layouts/{layout_id}/shopping-list").get_data(as_text=True)
+    assert "Storage bin" in page and "× 2" in page
+    assert "Mini fridge" in page
+    assert "Bean bag chair" in page and "your own size" in page
+    assert "Bed, twin XL" not in page
+    assert "3′ 0″ wide × 3′ 0″ deep × 2′ 4″ tall" in page
+
+
+def test_shopping_list_is_owner_only(client):
+    layout_id = shared_layout(add_user("owner@example.com"))
+    assert client.get(f"/layouts/{layout_id}/shopping-list").status_code == 302      # logged out
+    log_in(client, add_user("other@example.com"))
+    assert client.get(f"/layouts/{layout_id}/shopping-list").status_code == 403
+    assert client.get("/layouts/9999/shopping-list").status_code == 404
+
+
+def test_my_layouts_offers_share_and_shopping_list(client):
+    me = add_user()
+    layout_id = shared_layout(me)
+    log_in(client, me)
+    page = client.get("/layouts").get_data(as_text=True)
+    assert f'href="/layouts/{layout_id}/shopping-list"' in page
+    assert ">Stop sharing</button>" in page and "/share/test-token-123" in page

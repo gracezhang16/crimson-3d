@@ -521,3 +521,33 @@ export function checkCustomItem({ label, width, depth, height }) {
   }
   return { item: { label: name, ...sizes }, error: null };
 }
+
+// --- S7: shopping list ---------------------------------------------------------------
+
+/**
+ * The things to buy in a layout (SPEC.md 8.6): catalog items in the
+ * "purchase" category and custom "will it fit" items, identical ones
+ * grouped with a count. Harvard-supplied furniture isn't listed.
+ *
+ * @param {{item: {name: string, width: number, depth: number, height: number,
+ *   category: string}}[]} entries
+ * @returns {{name: string, width: number, depth: number, height: number, count: number,
+ *   custom: boolean}[]} in the order first placed
+ */
+export function shoppingList(entries) {
+  const groups = new Map();
+  for (const { item } of entries) {
+    if (item.category !== "purchase" && item.category !== "custom") continue;
+    const key = [item.name, item.width, item.depth, item.height].join("|");
+    const group = groups.get(key);
+    if (group) {
+      group.count += 1;
+    } else {
+      groups.set(key, {
+        name: item.name, width: item.width, depth: item.depth, height: item.height,
+        count: 1, custom: item.category === "custom",
+      });
+    }
+  }
+  return [...groups.values()];
+}
