@@ -82,6 +82,7 @@ export function attachInteraction({ canvas, camera, controls, layout }) {
     dragPlane.set(new THREE.Vector3(0, 1, 0), -point.y);
     drag = {
       entry,
+      start: { x: entry.placement.x, y: entry.placement.y }, // where to go back to if nowhere is free
       offsetX: point.x - entry.placement.x,
       offsetZ: point.z - entry.placement.y,
       pointerId: event.pointerId,
@@ -99,12 +100,15 @@ export function attachInteraction({ canvas, camera, controls, layout }) {
     aim(event);
     if (raycaster.ray.intersectPlane(dragPlane, hit)) {
       // Plan x = three.js x, plan y = three.js z (SPEC.md 4.1).
-      layout.moveTo(drag.entry, hit.x - drag.offsetX, hit.z - drag.offsetZ);
+      // pass: glide over other furniture while dragging; endDrag settles it.
+      layout.moveTo(drag.entry, hit.x - drag.offsetX, hit.z - drag.offsetZ, { pass: true });
     }
   });
 
   function endDrag(event) {
     if (drag && event.pointerId === drag.pointerId) {
+      // Let go on top of other furniture? It moves to the nearest free spot.
+      layout.settle(drag.entry, drag.start);
       drag = null;
       controls.enabled = true;
       if (canvas.hasPointerCapture(event.pointerId)) {

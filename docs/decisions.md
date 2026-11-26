@@ -481,3 +481,14 @@ Product choices from Grace: every suite comes with the furniture Harvard supplie
 - **Who gets what**: capacity is shared across bedrooms, extra students to the biggest bedroom (a double: 2 sets in one bedroom; 3 bedrooms for 4: 2 + 1 + 1). Common rooms and hallways get nothing, since we don't know what Harvard puts there. Each student gets the shopping list's "Harvard supplies" set: a bed, desk, desk chair, dresser, bookcase and floor lamp, plus a wardrobe where the bedroom has no closet.
 - **Placement reuses the planner's rules**: biggest pieces first, each at `rules.findFreeSpot` restricted to its bedroom, clear of furniture and of door, closet and radiator zones, turned 90° if needed. Desks try each way round until their chair fits in front, so they face into the room. Chair position: at rotation 0 a desk faces south, matching the sample layouts.
 - **Never overlapping**: a piece that doesn't fit is left out. Tests check that every furnished sample suite passes `rules.evaluate` with no issues at all.
+
+## 2026-11-26 (Dragging passes over furniture; it settles where it's free)
+
+Problem from Grace: with solid furniture, moving a piece across a crowded room meant steering it around everything else.
+
+Product choice: furniture is solid only where you let go (the usual planner-app behaviour). Alternatives offered: a "Move to room" button on the item toolbar, or holding a key to pass through.
+
+- **While dragging, nothing blocks**, and the piece turns see-through (`furniture.setGhost`: 45% opacity, no depth writes, so what's underneath shows) whenever it's over something it can't share space with. The orange tint and "N items don't fit" also show live, so it's clear it can't stay there.
+- **On letting go**, if it's on top of furniture, `rules.nearestFreeSpot` finds the closest spot that is inside a room and clear (square rings 1 in apart, nearest in a straight line within the first ring that has one, up to 20 ft). It glides there in 0.18 s. If nothing is free within 20 ft, it goes back to where the drag began. Rules 3 and 4 still apply: dropping a storage bin under a bed is fine.
+- **A click without moving never moves anything**, even an item that already overlaps something from an older layout.
+- **Unchanged**: arrow-key nudges still stop against furniture (`blockMove`), and a turn into furniture is still refused.

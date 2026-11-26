@@ -541,7 +541,7 @@ A suite's rooms are drawn together in one plan. Every wall, between rooms or out
 
 - **Pick:** `Raycaster` against item groups on pointer down.
 - **Drag:** on pointer down over an item, disable `OrbitControls`, record the offset between the hit point and the item centre, and on pointer move intersect the pointer ray with the horizontal plane at the hit height. Move the item to that point minus the offset, then apply `rules.snap`. Re-enable controls on pointer up.
-- *(Added 2026-11-26.)* **Furniture is solid:** a dragged or nudged item stops against other furniture and slides along it (`rules.blockMove`).
+- *(Added 2026-11-26, drag changed the same day.)* **Furniture is solid where it lands:** while being *dragged*, an item passes over other furniture, see-through while on top of something. If it's let go on top of furniture, it glides to the nearest free spot inside a room (`rules.nearestFreeSpot`, rings 1 in apart, up to 20 ft), or back to where the drag began if nothing is free. A click without moving never moves it. A *nudged* (arrow keys) item stops against other furniture and slides along it (`rules.blockMove`).
   - Rules 3 and 4 still hold: rugs never block, and anything low enough fits under a bed.
   - Anything the item already overlaps (an old layout, or no free spot when it was added) doesn't block, so it can be dragged free.
   - Overlaps are still flagged by `rules.evaluate`, for those cases.

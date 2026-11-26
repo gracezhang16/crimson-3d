@@ -64,6 +64,24 @@ export function setIssueTint(group, hasIssue) {
 }
 
 /**
+ * Make an item see-through (while it's dragged over other furniture), or
+ * solid again. depthWrite off lets the furniture underneath show through.
+ *
+ * @param {THREE.Group} group - from makeFurniture()
+ * @param {boolean} ghost
+ */
+export function setGhost(group, ghost) {
+  group.traverse((object) => {
+    if (object.isMesh && !object.userData.isLabel && object.material.transparent !== ghost) {
+      object.material.transparent = ghost;
+      object.material.opacity = ghost ? 0.45 : 1;
+      object.material.depthWrite = !ghost;
+      object.material.needsUpdate = true; // switching transparency needs a new shader
+    }
+  });
+}
+
+/**
  * Show or hide an item's name label.
  *
  * @param {THREE.Group} group - from makeFurniture()

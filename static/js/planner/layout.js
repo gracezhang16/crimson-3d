@@ -18,10 +18,11 @@
  */
 
 import * as THREE from "three";
-import { popIn, shrinkAway } from "./animate.js";
-import { makeFurniture, setIssueTint, setLabelVisible } from "./furniture.js";
+import { glide, popIn, shrinkAway } from "./animate.js";
+import { makeFurniture, setGhost, setIssueTint, setLabelVisible } from "./furniture.js";
 import {
-  blockMove, evaluate, findFreeSpot, firstCollision, footprint, footprintBox, itemDimensions, snap, zones,
+  blockMove, evaluate, findFreeSpot, firstCollision, footprint, footprintBox, itemDimensions, nearestFreeSpot,
+  snap, zones,
 } from "./rules.js";
 
 const SELECTION_COLOR = 0xa51c30;  // crimson (SPEC.md 8.4)
@@ -178,18 +179,53 @@ export function createLayout(geometry, catalogById, scene, requestRender, animat
      * @param {object} entry
      * @param {number} x - plan inches
      * @param {number} y
-     * @param {{flush?: boolean}} [options] - false for arrow keys (see rules.snap)
+     * @param {{flush?: boolean, pass?: boolean}} [options] - flush: false for arrow
+     *   keys (see rules.snap); pass: true while dragging, to glide over other
+     *   furniture (settle() then finds it a free spot when it's let go)
      */
     moveTo(entry, x, y, options = {}) {
       const wanted = snap({ x, y }, entry.item, entry.placement.rotation, outlines, options);
-      // Other furniture is solid: stop against it and slide along it.
-      const spot = blockMove(entry.placement, wanted, entry.item, entry.placement.rotation, othersThan(entry));
+      const others = othersThan(entry);
+      // Other furniture is solid: stop against it and slide along it. While
+      // dragging, pass over it instead, see-through while on top of something.
+      const spot = options.pass ? wanted : blockMove(entry.placement, wanted, entry.item, entry.placement.rotation, others);
+      if (options.pass) {
+        const box = footprintBox({ ...spot, rotation: entry.placement.rotation }, entry.item);
+        setGhost(entry.group, firstCollision(box, entry.item, others) !== null);
+      }
       if (spot.x === entry.placement.x && spot.y === entry.placement.y) {
         return; // nothing moved; skip the redraw
       }
       entry.placement.x = spot.x;
       entry.placement.y = spot.y;
       entry.group.position.set(spot.x, 0, spot.y);
+      changed(true);
+    },
+
+    /**
+     * A dragged item was let go. If it's on top of furniture it can't share
+     * space with, it moves to the nearest free spot (rules.nearestFreeSpot),
+     * gliding there; if nothing nearby is free, back to where the drag began.
+     *
+     * @param {object} entry
+     * @param {{x: number, y: number}} start - where the drag began
+     */
+    settle(entry, start) {
+      setGhost(entry.group, false);
+      if (entry.placement.x === start.x && entry.placement.y === start.y) {
+        return; // only clicked, not moved: leave it alone, even if it overlaps something
+      }
+      const others = othersThan(entry);
+      const { rotation } = entry.placement;
+      if (firstCollision(footprintBox(entry.placement, entry.item), entry.item, others) === null) {
+        return; // landed somewhere free: it stays exactly there
+      }
+      const spot = nearestFreeSpot(entry.placement, entry.item, rotation, outlines, others) ?? start;
+      const from = { x: entry.group.position.x, z: entry.group.position.z };
+      entry.placement.x = spot.x;
+      entry.placement.y = spot.y;
+      entry.group.position.set(spot.x, 0, spot.y);
+      if (animator) glide(animator, entry.group, from);
       changed(true);
     },
 

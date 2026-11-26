@@ -27,6 +27,7 @@ export const MAX_STAGGER_MS = 90;   // gap between pieces starting to fall...
 export const ALL_DROPS_MS = 900;    // ...squeezed so the last starts within this
 export const POP_MS = 320;          // an added item popping in
 export const SHRINK_MS = 200;       // a deleted item shrinking away
+export const GLIDE_MS = 180;        // a dropped item sliding into a free spot
 export const DROP_FROM = 60;        // inches above the floor a piece falls from
 
 // --- Easing curves: progress 0..1 in, 0..1 (roughly) out ----------------------------
@@ -203,6 +204,25 @@ export function popIn(animator, group) {
     duration: POP_MS,
     before: () => group.scale.setScalar(0.001),
     apply: (p) => group.scale.setScalar(Math.max(0.001, easeOutBack(p))),
+  });
+}
+
+/**
+ * A dropped item sliding the last few inches into a free spot (layout.settle).
+ * @param {ReturnType<typeof createAnimator>} animator
+ * @param {{position: {x: number, z: number}}} group
+ * @param {{x: number, z: number}} from - where it was let go (three.js x, z)
+ */
+export function glide(animator, group, from) {
+  const to = { x: group.position.x, z: group.position.z };
+  animator.add({
+    duration: GLIDE_MS,
+    before: () => { group.position.x = from.x; group.position.z = from.z; },
+    apply: (p) => {
+      const e = easeOutCubic(p);
+      group.position.x = from.x + (to.x - from.x) * e;
+      group.position.z = from.z + (to.z - from.z) * e;
+    },
   });
 }
 

@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 
 import {
-  blockMove, firstCollision,
+  blockMove, firstCollision, nearestFreeSpot,
   checkCustomItem, evaluate, findFreeSpot, footprint, footprintBox, insideAnyRoom, insideRoom, itemDimensions,
   mayOverlap, overlaps, pointInPolygon, shoppingList, snap, zones,
 } from "../static/js/planner/rules.js";
@@ -463,4 +463,34 @@ test("furniture may stand in a hallway, if it fits", () => {
     entry(futon, 24, 315),           // across it: 72 in can't fit in 48 in
   ]);
   assert.deepEqual(issues, [null, null, "Outside the room"]);
+});
+
+// --- Dragging over furniture, then settling (2026-11-26) -----------------------
+
+const square = (x, y, w, h) => [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+
+test("nearestFreeSpot: dropped on a bed, a desk lands just beside it", () => {
+  const room = [square(0, 0, 200, 200)];
+  const bed = placed(SOLID_BED, 100, 100);          // spans x 80-120, y 58-142
+  // Dropped dead centre on the bed: the nearest free spots are just west or east of it.
+  const spot = nearestFreeSpot({ x: 100, y: 100 }, SOLID_DESK, 90, room, [bed]); // turned: 24 wide, 42 deep
+  const box = footprintBox({ ...spot, rotation: 90 }, SOLID_DESK);
+  assert.ok(!overlaps(box, bed.box), "clear of the bed");
+  assert.equal(spot.y, 100);                        // straight out sideways, no need to move along it
+  assert.ok(spot.x === 68 || spot.x === 132, `beside the bed (x ${spot.x})`);
+});
+
+test("nearestFreeSpot keeps the item inside the rooms and returns where it is if that's free", () => {
+  const room = [square(0, 0, 200, 200)];
+  assert.deepEqual(nearestFreeSpot({ x: 50, y: 50 }, SOLID_DESK, 0, room, []), { x: 50, y: 50 });
+  // Dropped half outside the room: pulled back in.
+  const spot = nearestFreeSpot({ x: 5, y: 50 }, SOLID_DESK, 0, room, []);
+  assert.deepEqual(spot, { x: 21, y: 50 });
+});
+
+test("nearestFreeSpot ignores what it may share space with, and gives up when nothing is free", () => {
+  const room = [square(0, 0, 200, 200)];
+  assert.deepEqual(nearestFreeSpot({ x: 100, y: 100 }, SOLID_BIN, 0, room, [placed(SOLID_BED, 100, 100)]), { x: 100, y: 100 });
+  const tiny = [square(0, 0, 50, 50)];
+  assert.equal(nearestFreeSpot({ x: 25, y: 25 }, SOLID_DESK, 0, tiny, [placed(SOLID_DESK, 25, 25)], 30), null);
 });

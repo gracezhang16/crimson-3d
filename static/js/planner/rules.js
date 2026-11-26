@@ -469,6 +469,58 @@ export function blockMove(from, to, item, rotation, others) {
 }
 
 /**
+ * Where to put a dragged item that was let go on top of other furniture:
+ * the nearest spot (to where it was dropped) that is inside a room and clear
+ * of everything it can't share space with. Furniture can be dragged over
+ * other furniture (2026-11-26), but never left on top of it.
+ *
+ * Searches outwards in square rings 1 in apart, and within the first ring
+ * that has free spots, takes the one nearest in a straight line. Only the
+ * walls of the rooms limit it, so a piece dropped on a crowded bed can end
+ * up just beside it.
+ *
+ * @param {{x: number, y: number}} position - where it was dropped (its centre)
+ * @param {{width: number, depth: number, height: number, clearance: number}} item
+ * @param {number} rotation
+ * @param {number[][][]} outlines - every room's outline
+ * @param {{box: object, item: object}[]} others - every other item
+ * @param {number} [maxDistance] - how far to look, inches
+ * @returns {{x: number, y: number} | null} null if nowhere within maxDistance is free
+ */
+export function nearestFreeSpot(position, item, rotation, outlines, others, maxDistance = 240) {
+  const { halfX, halfY } = footprint(item, rotation);
+  const blockers = others.filter((other) => !mayOverlap(item, other.item)).map((other) => other.box);
+  const x0 = Math.round(position.x);
+  const y0 = Math.round(position.y);
+  const free = (x, y) => {
+    const box = { minX: x - halfX, minY: y - halfY, maxX: x + halfX, maxY: y + halfY };
+    return insideAnyRoom(box, outlines) && !blockers.some((other) => overlaps(box, other));
+  };
+  for (let ring = 0; ring <= maxDistance; ring++) {
+    let best = null;
+    let bestDistance = Infinity;
+    // Every point on the square ring at this distance (just the centre for ring 0).
+    for (let dx = -ring; dx <= ring; dx++) {
+      const edge = Math.abs(dx) === ring;
+      for (const dy of edge ? range(-ring, ring) : [-ring, ring]) {
+        const distance = Math.hypot(dx, dy);
+        if (distance < bestDistance && free(x0 + dx, y0 + dy)) {
+          best = { x: x0 + dx, y: y0 + dy };
+          bestDistance = distance;
+        }
+      }
+    }
+    if (best) return best;
+  }
+  return null;
+}
+
+/** Whole numbers from lo to hi inclusive. */
+function range(lo, hi) {
+  return Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
+}
+
+/**
  * The first item that a footprint would overlap, ignoring things it may
  * share space with (rules 3 and 4). Used to refuse a turn with no room.
  *
