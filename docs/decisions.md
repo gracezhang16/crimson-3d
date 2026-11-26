@@ -459,3 +459,8 @@ Product request from Grace: Rotate and Delete next to the furniture, so you don'
 - **Icons are inline SVG** (a turning arrow and a bin). No icon font or new files.
 - **Sits above the wall and room-name labels** (`z-index: 2`), so a label can never cover a button.
 - **Not on share pages**, which are read-only.
+
+## 2026-11-26 (Dragging rooms in the builder: tried and reverted)
+
+- **Arranging rooms by dragging them in the preview (with snapping one wall apart) was built and then reverted** at Grace's request: it felt awkward to use, and the typed "Where this room is in the suite" positions with "Place east/south of" work better. The hallway room kind built alongside it was reverted too, so `room.kind` is back to `bedroom` or `common` (SPEC.md 4.2 unchanged). The work is in git history (commit e4300a7) if we want any part of it back.
+- **Kept from it: the A8 fix** for "Undo corner / Cancel drawing" always showing. Bootstrap's `d-flex` overrides the `hidden` attribute, so the flex layout moved to an inner div.

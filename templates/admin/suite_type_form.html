@@ -266,13 +266,16 @@
                     <svg id="preview" class="border rounded w-100" role="img"
                          aria-label="Floor plan of the room, drawn to scale"></svg>
                     {# Shown while drawing (A8). Backspace and Escape do the same. #}
-                    <div id="draw-tools" class="d-flex gap-2 mt-2" hidden>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" data-action="undo-corner">
-                            Undo corner <kbd>⌫</kbd>
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" data-action="cancel-drawing">
-                            Cancel drawing <kbd>Esc</kbd>
-                        </button>
+                    {# The flex layout is on an inner div: Bootstrap's d-flex would override `hidden`. #}
+                    <div id="draw-tools" hidden>
+                        <div class="d-flex gap-2 mt-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" data-action="undo-corner">
+                                Undo corner <kbd>⌫</kbd>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" data-action="cancel-drawing">
+                                Cancel drawing <kbd>Esc</kbd>
+                            </button>
+                        </div>
                     </div>
                     <p id="draw-hint" class="small mt-2 mb-0" aria-live="polite" hidden></p>
                     {# Live summary or problems, announced to screen readers as they change. #}
