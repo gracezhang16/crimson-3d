@@ -412,3 +412,9 @@ Technical choices:
 - **Crossing walls are checked in JavaScript with the same messages as the server** (`outline.findCrossing` mirrors `geometry._find_crossing`). The new shared fixture `tests/fixtures/outline_cases.json` is checked by both test suites. Walk-the-walls mode shows these errors live now too, not only on save.
 - **Mouse position to inches uses `getScreenCTM().inverse()`**, the browser's own transform behind the SVG `viewBox`, so there's no scaling maths of our own.
 - **Corners snap every 6 in, but grid lines are drawn every 12 in**, to keep the grid readable.
+
+## 2026-11-26 (Polish pass 1: phone widths)
+
+- **Automated sweep before the freeze**: every page as a visitor, a student and an admin, at 1280 px and 390 px (phone) width, in headless Chrome. It checked for console errors, status codes, sideways scrolling, form fields without labels, buttons without text, duplicate ids and one `h1` per page. All 23 pages passed at both widths.
+- **My layouts turns into stacked blocks on phones** (`.stack-table`, CSS only). The table used to hide Open, Share and Delete off the right edge inside its own scroll area. Each cell shows its column name from a `data-label` attribute. The markup is unchanged, so `layouts.js` still finds rows with `closest("tr")`. The admin tables keep scrolling sideways on phones, since admins build suites on a computer.
+- **Removed the faint crimson wash** behind the top of every page (from the redesign). Under the black navbar only its tail showed, and it looked like a smudge.

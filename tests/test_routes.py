@@ -397,7 +397,7 @@ def test_my_layouts_lists_own_layouts_across_rooms(client):
     assert "Demo Hall · Single (sample)" in page
     assert f'href="/plan/{type_id("Single (sample)")}?layout={single_layout}"' in page
     assert f'data-layout-id="{double_layout}"' in page
-    assert '<td class="text-end">3</td>' in page          # item count
+    assert '<td class="text-end" data-label="Items">3</td>' in page          # item count
     assert "/static/js/layouts.js" in page
 
 

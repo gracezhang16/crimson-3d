@@ -18,7 +18,9 @@
 
     {% if layouts %}
         <div class="table-responsive">
-            <table class="table align-middle" id="layouts-table">
+            {# stack-table: on phones each row becomes a block (style.css), and
+               data-label gives each cell its column name back. #}
+            <table class="table align-middle stack-table" id="layouts-table">
                 <thead>
                     <tr>
                         <th scope="col">Name</th>
@@ -55,15 +57,15 @@
                                     </div>
                                 </div>
                             </td>
-                            <td>{{ layout.dorm_name }} · {{ layout.type_name }}</td>
-                            <td class="text-end">{{ layout.item_count }}</td>
-                            <td>
+                            <td data-label="Suite">{{ layout.dorm_name }} · {{ layout.type_name }}</td>
+                            <td class="text-end" data-label="Items">{{ layout.item_count }}</td>
+                            <td data-label="Last saved">
                                 {# SQLite stores UTC as "2026-11-24 07:37:33". The datetime
                                    attribute holds it in ISO form ("...T07:37:33Z") so
                                    layouts.js can show it in the viewer's own time zone. #}
                                 <time datetime="{{ layout.updated | replace(' ', 'T') }}Z">{{ layout.updated[:10] }}</time>
                             </td>
-                            <td class="text-end text-nowrap">
+                            <td class="text-end text-nowrap row-actions">
                                 <a class="btn btn-sm btn-crimson"
                                    href="{{ url_for('pages.plan', type_id=layout.suite_type_id, layout=layout.id) }}">Open</a>
                                 <a class="btn btn-sm btn-outline-secondary"

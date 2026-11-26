@@ -77,10 +77,7 @@
 }
 
 body {
-    /* A very faint crimson wash behind the top of every page. */
-    background:
-        radial-gradient(1100px 380px at 50% -160px, rgb(165 28 48 / 7%), transparent 70%),
-        var(--c3-bg);
+    background: var(--c3-bg);
     letter-spacing: -0.005em;
 }
 
@@ -378,6 +375,46 @@ kbd {
 /* Keep the room facts card a readable width on wide screens. */
 .narrow-card {
     max-width: 36rem;
+}
+
+/* Tables that turn into stacked blocks on phones (My layouts): no sideways
+   scrolling to reach the buttons. Each cell shows its column name from its
+   data-label attribute, since the header row is hidden. */
+@media (max-width: 767.98px) {
+    .stack-table thead {
+        display: none;
+    }
+
+    .stack-table tr {
+        display: block;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+
+    .stack-table td {
+        display: block;
+        padding: 0.15rem 0;
+        border: 0;
+        text-align: start !important;
+    }
+
+    .stack-table td[data-label]::before {
+        content: attr(data-label) ": ";
+        color: var(--bs-secondary-color);
+        font-size: 0.875em;
+    }
+
+    .stack-table .row-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.375rem;
+        padding-top: 0.5rem;
+        white-space: normal !important;
+    }
+
+    .stack-table td:first-child .layout-name {
+        font-weight: 600;
+    }
 }
 
 /* A small colour sample next to a furniture item's name (admin catalog). */
