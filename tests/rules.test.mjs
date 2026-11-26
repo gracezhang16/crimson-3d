@@ -447,3 +447,20 @@ test("firstCollision names what a turned item would hit", () => {
   assert.equal(firstCollision(turnedDesk, SOLID_DESK, [bed]).name, "Bed, twin XL");
   assert.equal(firstCollision(footprintBox({ x: 30, y: 60, rotation: 0 }, SOLID_DESK), SOLID_DESK, [bed]), null);
 });
+
+test("furniture may stand in a hallway, if it fits", () => {
+  const rect = (x, y, w, h) => [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+  const suite = { rooms: [
+    { name: "Bedroom A", kind: "bedroom", outline: rect(0, 0, 120, 144), features: [] },
+    { name: "Hallway", kind: "hallway", outline: rect(0, 149, 48, 180), features: [] },
+  ] };
+  const entry = (item, x, y, rotation = 0) => ({ placement: { x, y, rotation }, item });
+  const bookcase = { name: "Bookcase", width: 30, depth: 12, height: 48, clearance: 0 };
+  const futon = { name: "Futon", width: 72, depth: 34, height: 32, clearance: 0 };
+  const issues = evaluate(suite, [
+    entry(bookcase, 24, 200),        // well inside the 48 in wide hallway
+    entry(futon, 24, 260, 90),       // turned to run along it: 34 wide, fits
+    entry(futon, 24, 315),           // across it: 72 in can't fit in 48 in
+  ]);
+  assert.deepEqual(issues, [null, null, "Outside the room"]);
+});
