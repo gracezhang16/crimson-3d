@@ -387,3 +387,12 @@ Technical choices:
 - **The export also writes `seed/dorms.json` and `seed/furniture.json`.** Without them, a rebuild would lose dorm yards and descriptions (Dorms page) and catalog edits (A7). Custom items in a default layout are written with their label and size, since they have no slug. SPEC.md section 5 is updated with both.
 - **Demo passwords are random (`secrets.token_urlsafe(8)`) and change on every rebuild**, printed once in the terminal. A fixed password written in the repository would be a known login on any deployed copy. The demo suites D-101 and D-201 are invented numbers in the invented Demo Hall.
 - **`init_db.py` uses `argparse`** (standard library) for `--demo-users`, which also gives it `--help`.
+
+## 2026-11-26 (A7 furniture catalog editor, A9 export button)
+
+- **A furniture item's slug can't be changed after it's created**: the planner picks the 3D shape by slug (`shapes.js`), and seed files refer to items by slug. A new item with a slug the planner doesn't know is drawn as a box in its colour. Alternative: let slugs change and update every seed file, which isn't worth it.
+- **Deleting an item is refused while any layout uses it** (saved or default), with the count shown. Deleting would break those layouts, and the foreign key would refuse it anyway. Changing the item is the way to "replace" it.
+- **Size limits match the database CHECKs** (width and depth 1–200 in, height 1–120 in). Clearance must be less than the height. Colours are stored in lowercase so the export stays stable.
+- **Resizing an item doesn't move anyone's furniture**: layouts keep their positions, and the planner's rules flag anything that now overlaps or no longer fits.
+- **The Export button runs the same `export_seed` as `python export_rooms.py`** and writes into the `seed/` folder of the code the server runs from. It's meant for a team member's own computer, and the files still need committing. On a server where that folder can't be written, the page says so (status 500) instead of crashing. `app.config["SEED_DIR"]` lets the tests export into a temporary copy.
+- **The delete confirmation uses `tojson`** to put the item's name into the inline `confirm(...)`, so an apostrophe in a name can't break the JavaScript.

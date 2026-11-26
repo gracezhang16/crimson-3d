@@ -469,7 +469,11 @@ Every route uses `@admin_required`.
 | GET, POST | `/admin/suites` | List specific suites with their students; add a suite (number, suite type; its dorm comes from the type) | *(Updated 2026-11-24 for suites.)*
 | POST | `/admin/suites/<id>/assign` | Form field `email`; links a registered student to the suite (moving them if they had one; refused when the suite is at capacity) |
 | POST | `/admin/suites/<id>/unassign` | Form field `user_id`; removes that student from the suite |
-| GET, POST | `/admin/furniture` | Edit catalog sizes, names, colours |
+| GET | `/admin/furniture` | The catalog, with how many layouts use each item *(A7, updated 2026-11-26)* |
+| GET, POST | `/admin/furniture/new` | Add an item (name, slug, category, width, depth, height, clearance, colour, note) |
+| GET, POST | `/admin/furniture/<id>/edit` | Change everything except the slug (the planner picks 3D shapes by slug) |
+| POST | `/admin/furniture/<id>/delete` | Delete an item, refused while any layout uses it |
+| GET, POST | `/admin/export` | Explain, or run `export_rooms.export_seed` into `seed/` and list changed and left-alone files *(A9, added 2026-11-26)* |
 
 The builder form posts the geometry as a hidden JSON field built by `builder/main.js`, plus the ordinary fields (dorm, name, capacity, bathroom, measured_by, measured_on, notes). The server parses it and runs `geometry.validate_room()`. On error, re-render the form with the submitted values and a list of human-readable errors such as "Window 2 is wider than wall C (42 in on a 36 in wall)".
 

@@ -1,0 +1,92 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ item.name if item else "New item" }} · Furniture · Admin{% endblock %}
+
+{% block main %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}">Admin</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.furniture') }}">Furniture catalog</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ item.name if item else "New item" }}</li>
+        </ol>
+    </nav>
+
+    <h1 class="h3 mb-3">{{ "Edit " ~ item.name if item else "Add a furniture item" }}</h1>
+
+    <div class="narrow-card">
+        {% if errors %}
+            <div class="alert alert-danger" role="alert">
+                <p class="mb-1">Please fix:</p>
+                <ul class="mb-0">{% for error in errors %}<li>{{ error }}</li>{% endfor %}</ul>
+            </div>
+        {% endif %}
+
+        <form method="post" action="{{ url_for('admin.edit_furniture', furniture_id=item.id) if item else url_for('admin.new_furniture') }}">
+            <div class="mb-3">
+                <label for="name" class="form-label">Name</label>
+                <input id="name" name="name" class="form-control" value="{{ values.name }}" maxlength="60" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="slug" class="form-label">Slug</label>
+                {% if item %}
+                    <input id="slug" class="form-control font-monospace" value="{{ item.slug }}" readonly aria-describedby="slug-help">
+                    <div id="slug-help" class="form-text">
+                        The slug can't change: the planner picks the item's 3D shape by it, and seed files refer to it.
+                    </div>
+                {% else %}
+                    <input id="slug" name="slug" class="form-control font-monospace" value="{{ values.slug }}" maxlength="40"
+                           pattern="[a-z0-9]+(-[a-z0-9]+)*" required aria-describedby="slug-help">
+                    <div id="slug-help" class="form-text">
+                        A short id like <code>storage-bin</code>: lowercase letters and digits joined by hyphens.
+                        Built-in items (bed, desk, futon, ...) have their own 3D shapes; a new item is drawn as a box in its colour.
+                    </div>
+                {% endif %}
+            </div>
+
+            <fieldset class="mb-3">
+                <legend class="form-label fs-6">Category</legend>
+                {% for value, label in [("harvard", "Harvard supplies it"), ("purchase", "Students buy it (goes on the shopping list)")] %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="category" id="category-{{ value }}" value="{{ value }}"
+                               {{ "checked" if values.category == value }}>
+                        <label class="form-check-label" for="category-{{ value }}">{{ label }}</label>
+                    </div>
+                {% endfor %}
+            </fieldset>
+
+            <div class="row g-2 mb-1">
+                {% for field, limit in [("width", 200), ("depth", 200), ("height", 120)] %}
+                    <div class="col-4">
+                        <label for="{{ field }}" class="form-label">{{ field | capitalize }} (in)</label>
+                        <input id="{{ field }}" name="{{ field }}" type="number" class="form-control" min="1" max="{{ limit }}" step="1"
+                               value="{{ values[field] }}" required>
+                    </div>
+                {% endfor %}
+            </div>
+            <p class="form-text mt-0 mb-3">Width is side to side, depth front to back, as seen from the front of the item.</p>
+
+            <div class="row g-2 mb-3">
+                <div class="col-6">
+                    <label for="clearance" class="form-label">Clearance (in)</label>
+                    <input id="clearance" name="clearance" type="number" class="form-control" min="0" max="119" step="1"
+                           value="{{ values.clearance }}" aria-describedby="clearance-help">
+                    <div id="clearance-help" class="form-text">Free space underneath, e.g. under a raised bed. Usually 0.</div>
+                </div>
+                <div class="col-6">
+                    <label for="color" class="form-label">Colour</label>
+                    <input id="color" name="color" type="color" class="form-control form-control-color" value="{{ values.color }}">
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="note" class="form-label">Note <span class="text-body-secondary small">(optional)</span></label>
+                <input id="note" name="note" class="form-control" value="{{ values.note }}" maxlength="200">
+                <div class="form-text">For example "Placeholder size: replace with measured".</div>
+            </div>
+
+            <button type="submit" class="btn btn-crimson">{{ "Save changes" if item else "Add item" }}</button>
+            <a class="btn btn-outline-secondary" href="{{ url_for('admin.furniture') }}">Cancel</a>
+        </form>
+    </div>
+{% endblock %}

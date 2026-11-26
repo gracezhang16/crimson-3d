@@ -380,6 +380,16 @@ kbd {
     max-width: 36rem;
 }
 
+/* A small colour sample next to a furniture item's name (admin catalog). */
+.swatch {
+    display: inline-block;
+    width: 0.9rem;
+    height: 0.9rem;
+    border-radius: 0.2rem;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    vertical-align: -0.1rem;
+}
+
 /* The suite facts page: wide enough for its table of rooms. */
 .facts-card {
     max-width: 50rem;

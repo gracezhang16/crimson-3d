@@ -7,10 +7,13 @@ logged-in admin gets a 403 page. tests/test_admin.py checks this for every
 """
 
 import json
+import re
 from datetime import date
 
-from flask import Blueprint, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import (Blueprint, current_app, flash, jsonify, redirect, render_template, request, session,
+                   url_for)
 
+import export_rooms
 from geometry import validate_suite
 from helpers import (admin_required, apology, db, insert_placements, json_error, normalize_email,
                      placements_error, run_in_transaction)
@@ -506,3 +509,175 @@ def unassign_suite(suite_id):
     else:
         flash("That student isn't assigned to this suite.")
     return redirect(url_for("admin.suites"))
+
+
+# ---------------------------------------------------------------------------
+# Furniture catalog (A7). Saved layouts store a furniture id, not a size, so
+# changing an item here changes it in every planner straight away.
+# ---------------------------------------------------------------------------
+
+FURNITURE_FIELDS = ("name", "slug", "category", "width", "depth", "height", "clearance", "color", "note")
+CATEGORIES = ("harvard", "purchase")
+MAX_FURNITURE_NAME = 60
+MAX_SLUG = 40
+MAX_FURNITURE_NOTE = 200
+# Limits match the CHECK constraints in schema.sql and SPEC.md 4.4.
+SIZE_LIMITS = {"width": 200, "depth": 200, "height": 120}
+SLUG_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")   # e.g. "bed-twin-xl"
+COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{6}$")          # e.g. "#b8875a"
+
+
+@admin.route("/furniture")
+@admin_required
+def furniture():
+    """The whole catalog, with how many layouts use each item."""
+    items = db.execute(
+        "SELECT furniture.*, COUNT(DISTINCT placements.layout_id) AS layout_count "
+        "FROM furniture LEFT JOIN placements ON placements.furniture_id = furniture.id "
+        "GROUP BY furniture.id ORDER BY furniture.category = 'purchase', furniture.name"
+    )
+    return render_template("admin/furniture.html", items=items)
+
+
+@admin.route("/furniture/new", methods=["GET", "POST"])
+@admin_required
+def new_furniture():
+    """Add a catalog item."""
+    values = {field: "" for field in FURNITURE_FIELDS}
+    values.update(category="purchase", clearance="0", color="#8a8f96")
+    errors = []
+    if request.method == "POST":
+        values = furniture_form_values()
+        errors, clean = furniture_problems(values, new=True)
+        if not errors:
+            try:
+                db.execute(
+                    "INSERT INTO furniture (slug, name, category, width, depth, height, clearance, color, note) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    clean["slug"], clean["name"], clean["category"], clean["width"], clean["depth"],
+                    clean["height"], clean["clearance"], clean["color"], clean["note"],
+                )
+            except ValueError:  # UNIQUE (slug) failed
+                errors = [f"Another item already uses the slug {clean['slug']}."]
+            else:
+                flash(f"Added {clean['name']} to the catalog.")
+                return redirect(url_for("admin.furniture"))
+    return render_template("admin/furniture_form.html", item=None, values=values, errors=errors), \
+        400 if errors else 200
+
+
+@admin.route("/furniture/<int:furniture_id>/edit", methods=["GET", "POST"])
+@admin_required
+def edit_furniture(furniture_id):
+    """Change a catalog item's name, category, size, colour or note.
+
+    The slug can't change: the planner picks an item's 3D shape by its slug
+    (static/js/planner/shapes.js), and seed files refer to items by slug.
+    """
+    rows = db.execute("SELECT * FROM furniture WHERE id = ?", furniture_id)
+    if not rows:
+        return apology("We couldn't find that furniture item.", 404)
+    item = rows[0]
+    values = {field: "" if item[field] is None else str(item[field]) for field in FURNITURE_FIELDS}
+    errors = []
+    if request.method == "POST":
+        values = furniture_form_values()
+        values["slug"] = item["slug"]
+        errors, clean = furniture_problems(values, new=False)
+        if not errors:
+            db.execute(
+                "UPDATE furniture SET name = ?, category = ?, width = ?, depth = ?, height = ?, "
+                "clearance = ?, color = ?, note = ? WHERE id = ?",
+                clean["name"], clean["category"], clean["width"], clean["depth"], clean["height"],
+                clean["clearance"], clean["color"], clean["note"], furniture_id,
+            )
+            flash(f"Saved {clean['name']}. Every planner uses the new details now.")
+            return redirect(url_for("admin.furniture"))
+    return render_template("admin/furniture_form.html", item=item, values=values, errors=errors), \
+        400 if errors else 200
+
+
+@admin.route("/furniture/<int:furniture_id>/delete", methods=["POST"])
+@admin_required
+def delete_furniture(furniture_id):
+    """Delete a catalog item, but only if no layout (saved or default) uses it."""
+    rows = db.execute("SELECT name FROM furniture WHERE id = ?", furniture_id)
+    if not rows:
+        return apology("We couldn't find that furniture item.", 404)
+    name = rows[0]["name"]
+    layouts = count("SELECT COUNT(DISTINCT layout_id) AS n FROM placements WHERE furniture_id = ?", furniture_id)
+    if layouts:
+        flash(f"Can't delete {name}: {layouts} layout{'' if layouts == 1 else 's'} use it. "
+              "Remove it from them first, or change it instead.")
+    else:
+        db.execute("DELETE FROM furniture WHERE id = ?", furniture_id)
+        flash(f"Deleted {name} from the catalog.")
+    return redirect(url_for("admin.furniture"))
+
+
+def furniture_form_values():
+    """The submitted furniture fields as trimmed strings."""
+    return {field: (request.form.get(field) or "").strip() for field in FURNITURE_FIELDS}
+
+
+def furniture_problems(values, new):
+    """Check a furniture form. Returns (errors, clean values ready to save).
+
+    `new` is True when adding an item, the only time the slug is checked.
+    """
+    errors = []
+    clean = {"name": values["name"], "slug": values["slug"], "category": values["category"],
+             "color": values["color"].lower(), "note": values["note"] or None}
+    if not 1 <= len(clean["name"]) <= MAX_FURNITURE_NAME:
+        errors.append(f"Give the item a name of 1 to {MAX_FURNITURE_NAME} characters.")
+    if new and not (len(clean["slug"]) <= MAX_SLUG and SLUG_PATTERN.match(clean["slug"])):
+        errors.append(f"The slug must be up to {MAX_SLUG} lowercase letters and digits joined by hyphens, "
+                      "like storage-bin.")
+    if clean["category"] not in CATEGORIES:
+        errors.append("Choose whether Harvard supplies it or students buy it.")
+    for field, limit in SIZE_LIMITS.items():
+        clean[field] = whole_number(values[field])
+        if clean[field] is None or not 1 <= clean[field] <= limit:
+            errors.append(f"The {field} must be a whole number of inches from 1 to {limit}.")
+    clean["clearance"] = whole_number(values["clearance"] or "0")
+    if clean["clearance"] is None or clean["clearance"] < 0:
+        errors.append("The clearance must be a whole number of inches, 0 or more.")
+    elif clean["height"] is not None and clean["clearance"] >= clean["height"]:
+        errors.append(f"The clearance (space underneath) must be less than the height ({clean['height']} in).")
+    if not COLOR_PATTERN.match(clean["color"]):
+        errors.append("Pick a colour, written like #b8875a.")
+    if len(values["note"]) > MAX_FURNITURE_NOTE:
+        errors.append(f"The note can be at most {MAX_FURNITURE_NOTE} characters.")
+    return errors, clean
+
+
+def whole_number(text):
+    """'42' -> 42; anything that isn't a whole number -> None."""
+    return int(text) if text.isdigit() else None
+
+
+# ---------------------------------------------------------------------------
+# Export (A9): write the database back to seed/ so it can be committed
+# ---------------------------------------------------------------------------
+
+@admin.route("/export", methods=["GET", "POST"])
+@admin_required
+def export():
+    """Explain the export (GET), or run it and show which files changed (POST).
+
+    This runs the same code as `python export_rooms.py`. It writes into the
+    seed/ folder of the copy of the code the server is running from, so it is
+    meant for a team member's own computer: the files still have to be
+    committed with git to reach everyone else.
+
+    app.config["SEED_DIR"] can point somewhere else; the tests use that so
+    they never write into the real seed/.
+    """
+    report, error = None, None
+    if request.method == "POST":
+        seed_dir = current_app.config.get("SEED_DIR", export_rooms.SEED_DIR)
+        try:
+            report = export_rooms.export_seed(db, seed_dir)
+        except OSError as exception:  # e.g. a server where the code folder is read-only
+            error = f"Couldn't write the seed files: {exception.strerror or exception}."
+    return render_template("admin/export.html", report=report, error=error), 500 if error else 200

@@ -1,0 +1,62 @@
+{% extends "layout.html" %}
+
+{% block title %}Export · Admin{% endblock %}
+
+{% block main %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}">Admin</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Export</li>
+        </ol>
+    </nav>
+
+    <h1 class="h3 mb-2">Export to seed files</h1>
+    <div class="narrow-card">
+        <p class="text-body-secondary">
+            Writes every dorm, the furniture catalog and every <strong>published</strong> suite type (with its default layout)
+            into the <code>seed/</code> folder, so <code>python init_db.py</code> can rebuild the site with them.
+            Drafts are not exported. This is the same as running <code>python export_rooms.py</code>.
+        </p>
+
+        {% if error %}
+            <div class="alert alert-danger" role="alert">{{ error }}</div>
+        {% endif %}
+
+        {% if report %}
+            <div class="alert alert-success" role="status">
+                {% if report.changed %}
+                    Export done: {{ report.changed | length }} file{{ "" if report.changed | length == 1 else "s" }} changed,
+                    {{ report.unchanged | length }} unchanged.
+                {% else %}
+                    Export done: nothing changed. The seed files already match the database.
+                {% endif %}
+            </div>
+            {% if report.changed %}
+                <h2 class="h6">Changed</h2>
+                <ul class="list-unstyled small font-monospace">
+                    {% for name in report.changed %}<li>seed/{{ name }}</li>{% endfor %}
+                </ul>
+            {% endif %}
+            {% if report.stale %}
+                <h2 class="h6">In seed/ but not published here</h2>
+                <p class="small text-body-secondary mb-1">
+                    These files match no published suite type (it may be a draft now, or renamed). They were left alone:
+                    delete them by hand if the suite is gone for good.
+                </p>
+                <ul class="list-unstyled small font-monospace">
+                    {% for name in report.stale %}<li>seed/{{ name }}</li>{% endfor %}
+                </ul>
+            {% endif %}
+            {% if report.changed %}
+                <p class="small">
+                    Next, on this computer: check the changes with <code>git diff seed/</code>, then commit them so the rest of
+                    the team gets them.
+                </p>
+            {% endif %}
+        {% endif %}
+
+        <form action="{{ url_for('admin.export') }}" method="post">
+            <button type="submit" class="btn btn-crimson">{{ "Export again" if report else "Export now" }}</button>
+        </form>
+    </div>
+{% endblock %}

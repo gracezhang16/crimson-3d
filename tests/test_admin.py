@@ -6,7 +6,10 @@ The guard tests don't list admin URLs by hand. They read Flask's route table
 route added later without @admin_required fails these tests straight away.
 """
 
+import json
 import re
+import shutil
+from pathlib import Path
 
 import pytest
 
@@ -162,8 +165,6 @@ def test_bad_dorm_keeps_what_was_typed(client):
 
 
 # --- A4: save, edit, publish ---------------------------------------------------
-
-import json  # noqa: E402  (grouped with the A4 tests that use it)
 
 L_ROOM = {
     "version": 2, "units": "in", "ceiling": 96,
@@ -504,3 +505,144 @@ def test_edit_page_links_to_default_layout(client):
     single = type_id_named("Single (sample)")
     page = admin_client(client).get(f"/admin/types/{single}/edit").get_data(as_text=True)
     assert f'href="/admin/types/{single}/default-layout"' in page
+
+
+# ---------------------------------------------------------------------------
+# A7: furniture catalog editor
+# ---------------------------------------------------------------------------
+
+def furniture_form(**changes):
+    """A valid furniture form, with any fields replaced by `changes`."""
+    form = {"name": "Beanbag chair", "slug": "beanbag", "category": "purchase", "width": "36", "depth": "36",
+            "height": "28", "clearance": "0", "color": "#AA3344", "note": ""}
+    form.update(changes)
+    return form
+
+
+def catalog_item(slug):
+    """The /api/furniture entry for `slug`, as every planner receives it."""
+    return next((item for item in app.test_client().get("/api/furniture").get_json() if item["slug"] == slug), None)
+
+
+def test_catalog_lists_every_item_with_layout_counts(client):
+    page = admin_client(client).get("/admin/furniture").get_data(as_text=True)
+    for (name,) in [(row["name"],) for row in db.execute("SELECT name FROM furniture")]:
+        assert f">{name}<" in page.replace("&#39;", "'")
+    # All three sample default layouts have a bed.
+    assert re.search(r"Bed, twin XL.*?<td class=\"text-end\">3</td>", page, re.S)
+
+
+def test_changing_the_bed_changes_it_in_every_planner(client):
+    """A7's 'done when': saved layouts store the furniture id, so the planner
+    (which reads sizes from /api/furniture) shows the new size everywhere."""
+    bed = db.execute("SELECT * FROM furniture WHERE slug = 'bed-twin-xl'")[0]
+    form = furniture_form(name=bed["name"], category="harvard", width="39", depth="80", height="36",
+                          clearance="14", color=bed["color"], note="Measured in Demo Hall")
+    response = admin_client(client).post(f"/admin/furniture/{bed['id']}/edit", data=form)
+    assert response.status_code == 302
+    item = catalog_item("bed-twin-xl")
+    assert (item["width"], item["depth"], item["note"]) == (39, 80, "Measured in Demo Hall")
+
+
+def test_the_slug_cannot_be_changed(client):
+    desk_id = db.execute("SELECT id FROM furniture WHERE slug = 'desk'")[0]["id"]
+    admin_client(client).post(f"/admin/furniture/{desk_id}/edit",
+                              data=furniture_form(name="Desk", slug="table", category="harvard"))
+    assert db.execute("SELECT slug FROM furniture WHERE id = ?", desk_id)[0]["slug"] == "desk"
+
+
+@pytest.mark.parametrize("changes, message", [
+    ({"name": ""}, "name of 1 to 60"),
+    ({"width": "0"}, "width must be a whole number of inches from 1 to 200"),
+    ({"depth": "12.5"}, "depth must be a whole number"),
+    ({"height": "121"}, "from 1 to 120"),
+    ({"clearance": "28"}, "less than the height (28 in)"),
+    ({"color": "red"}, "Pick a colour"),
+    ({"category": "borrowed"}, "Harvard supplies it or students buy it"),
+    ({"slug": "Bean Bag"}, "lowercase letters and digits joined by hyphens"),
+    ({"slug": "desk"}, "Another item already uses the slug desk"),
+])
+def test_new_item_is_validated(client, changes, message):
+    response = admin_client(client).post("/admin/furniture/new", data=furniture_form(**changes))
+    assert response.status_code == 400
+    assert message in response.get_data(as_text=True)
+
+
+def test_new_item_appears_in_the_planner_catalog(client):
+    response = admin_client(client).post("/admin/furniture/new", data=furniture_form())
+    assert response.status_code == 302
+    item = catalog_item("beanbag")
+    assert item["category"] == "purchase"
+    assert item["color"] == "#aa3344"   # stored in lowercase
+    assert (item["width"], item["depth"], item["height"]) == (36, 36, 28)
+
+
+def test_an_item_in_use_cannot_be_deleted(client):
+    bed_id = db.execute("SELECT id FROM furniture WHERE slug = 'bed-twin-xl'")[0]["id"]
+    response = admin_client(client).post(f"/admin/furniture/{bed_id}/delete", follow_redirects=True)
+    assert "3 layouts use it" in response.get_data(as_text=True)
+    assert db.execute("SELECT id FROM furniture WHERE id = ?", bed_id)
+
+
+def test_an_unused_item_can_be_deleted(client):
+    admin_client(client).post("/admin/furniture/new", data=furniture_form())
+    item_id = db.execute("SELECT id FROM furniture WHERE slug = 'beanbag'")[0]["id"]
+    client.post(f"/admin/furniture/{item_id}/delete")
+    assert catalog_item("beanbag") is None
+
+
+def test_missing_furniture_is_404(client):
+    admin_client(client)
+    assert client.get("/admin/furniture/999/edit").status_code == 404
+    assert client.post("/admin/furniture/999/delete").status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# A9: export button
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def seed_copy(tmp_path, monkeypatch):
+    """Point the export at a copy of seed/ so the real one is never written."""
+    target = tmp_path / "seed"
+    shutil.copytree(Path(__file__).parent.parent / "seed", target)
+    monkeypatch.setitem(app.config, "SEED_DIR", target)  # undone after the test
+    return target
+
+
+def test_export_page_explains_and_offers_the_button(client):
+    page = admin_client(client).get("/admin/export").get_data(as_text=True)
+    assert "python export_rooms.py" in page
+    assert "Export now" in page
+
+
+def test_export_of_an_unchanged_database_changes_nothing(client, seed_copy):
+    page = admin_client(client).post("/admin/export").get_data(as_text=True)
+    assert "nothing changed" in page
+
+
+def test_export_writes_a_changed_suite_and_lists_it(client, seed_copy):
+    db.execute("UPDATE suite_types SET notes = 'Edited for the export test.' WHERE name = 'Single (sample)'")
+    page = admin_client(client).post("/admin/export").get_data(as_text=True)
+    assert "1 file changed" in page
+    assert "seed/suites/demo-hall-single.json" in page
+    assert "git diff seed/" in page
+    written = json.loads((seed_copy / "suites" / "demo-hall-single.json").read_text())
+    assert written["notes"] == "Edited for the export test."
+
+
+def test_export_lists_seed_files_it_left_alone(client, seed_copy):
+    db.execute("UPDATE suite_types SET status = 'draft' WHERE name = 'Double (sample)'")
+    page = admin_client(client).post("/admin/export").get_data(as_text=True)
+    assert "seed/suites/demo-hall-double.json" in page
+    assert "left alone" in page
+    assert (seed_copy / "suites" / "demo-hall-double.json").exists()
+
+
+def test_export_reports_a_folder_it_cannot_write(client, tmp_path, monkeypatch):
+    blocker = tmp_path / "not-a-folder"
+    blocker.write_text("")
+    monkeypatch.setitem(app.config, "SEED_DIR", blocker)
+    response = admin_client(client).post("/admin/export")
+    assert response.status_code == 500
+    assert "Couldn&#39;t write the seed files" in response.get_data(as_text=True)

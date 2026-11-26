@@ -1,0 +1,66 @@
+{% extends "layout.html" %}
+
+{% block title %}Furniture catalog · Admin{% endblock %}
+
+{% block main %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.index') }}">Admin</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Furniture catalog</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h1 class="h3 mb-0">Furniture catalog</h1>
+        <a class="btn btn-crimson" href="{{ url_for('admin.new_furniture') }}">Add an item</a>
+    </div>
+    <p class="text-body-secondary mb-4">
+        Layouts remember which item was placed, not its size, so a change here shows up in every planner straight away.
+        An item can only be deleted when no layout uses it.
+    </p>
+
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th scope="col">Item</th>
+                    <th scope="col">Category</th>
+                    <th scope="col">Size (w × d × h)</th>
+                    <th scope="col" class="text-end">Layouts using it</th>
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                    <tr>
+                        <td>
+                            {# The swatch is decoration; the name says what the item is. #}
+                            <span class="swatch me-2" style="background: {{ item.color }}" aria-hidden="true"></span>
+                            <span class="fw-semibold">{{ item.name }}</span>
+                            <span class="d-block small text-body-secondary font-monospace">{{ item.slug }}</span>
+                            {% if item.note %}<span class="d-block small text-body-secondary">{{ item.note }}</span>{% endif %}
+                        </td>
+                        <td>{{ "Harvard supplies" if item.category == "harvard" else "Students buy" }}</td>
+                        <td class="text-nowrap">
+                            {{ item.width }} × {{ item.depth }} × {{ item.height }} in
+                            {% if item.clearance %}<span class="d-block small text-body-secondary">{{ item.clearance }} in clear underneath</span>{% endif %}
+                        </td>
+                        <td class="text-end">{{ item.layout_count }}</td>
+                        <td class="text-end text-nowrap">
+                            <a class="btn btn-sm btn-crimson" href="{{ url_for('admin.edit_furniture', furniture_id=item.id) }}">Edit</a>
+                            {% if item.layout_count == 0 %}
+                                {# tojson writes the message as a JavaScript string with quotes and
+                                   apostrophes escaped, so any item name is safe inside this
+                                   single-quoted attribute. #}
+                                <form class="d-inline" method="post" action="{{ url_for('admin.delete_furniture', furniture_id=item.id) }}"
+                                      onsubmit='return confirm({{ ("Delete " ~ item.name ~ " from the catalog?") | tojson }})'>
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary">Delete</button>
+                                </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}

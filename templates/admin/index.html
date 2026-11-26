@@ -42,14 +42,11 @@
         <a class="list-group-item list-group-item-action" href="{{ url_for('admin.dorms') }}">
             Dorms <span class="text-body-secondary small">· add the dorms suites belong to</span>
         </a>
-        {# Pages still to be built, listed so the plan is visible. Each becomes a
-           link when its milestone lands (SPEC.md 10, admin track). #}
-        {% for name, milestone in [
-            ("Furniture catalog", "A7"),
-        ] %}
-            <span class="list-group-item text-body-secondary">
-                {{ name }} <span class="badge text-bg-dark border">coming in {{ milestone }}</span>
-            </span>
-        {% endfor %}
+        <a class="list-group-item list-group-item-action" href="{{ url_for('admin.furniture') }}">
+            Furniture catalog <span class="text-body-secondary small">· sizes, names and colours used in every planner</span>
+        </a>
+        <a class="list-group-item list-group-item-action" href="{{ url_for('admin.export') }}">
+            Export to seed files <span class="text-body-secondary small">· save published suites into seed/ to commit</span>
+        </a>
     </div>
 {% endblock %}
