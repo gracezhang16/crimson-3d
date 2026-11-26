@@ -305,9 +305,12 @@ Design notes (for DESIGN.md):
 
 `init_db.py` creates a fresh `crimson3d.db` from `schema.sql`, then loads:
 
-- `seed/furniture.json`: the catalog below.
-- `seed/suites/*.json`: one file per suite type, each `{dorm, name, capacity, bathroom, geometry (format version 2), measured_by, measured_on, notes, status, default_layout: [placements by furniture slug]}`.
-- With `--demo-users`: three invented student accounts and their passwords, printed to the terminal, for the showcase. Never real names or real room assignments.
+- `seed/dorms.json` (if present): `[{name, yard, description}]`. A dorm named only in a suite file is still created, with no yard or description. *(Added 2026-11-26.)*
+- `seed/furniture.json`: the catalog below, one item per line.
+- `seed/suites/*.json`: one file per suite type, each `{dorm, name, capacity, bathroom, geometry (format version 2), measured_by, measured_on, notes, status, default_layout: [placements by furniture slug]}`. A default-layout entry is `{slug, x, y, rotation}` for catalog furniture, or `{label, width, depth, height, x, y, rotation}` for a custom item. *(Custom entries added 2026-11-26.)*
+- With `--demo-users`: three invented student accounts (`demo1@example.com` to `demo3@example.com`), each with a random password printed to the terminal, for the showcase. Demo Hall gets invented suite numbers D-101 (the single, assigned to demo1) and D-201 (the two-bedroom suite, assigned to demo2); demo3 has no suite. Never real names or real room assignments.
+
+`python export_rooms.py` writes the database back into these files: every dorm, the whole catalog, and every *published* suite type with its default layout. A suite already in `seed/suites/` is rewritten in its own file; a new one gets a file named after its dorm and name. Files change only when their content does. A seed file that matches no published suite type is listed, never deleted. Exporting a database freshly built from `seed/` changes nothing (tested). *(Added 2026-11-26.)*
 
 Ship invented sample suites in a dorm called **"Demo Hall"** so the site works before real measurements exist: a single (one 114 × 150 in bedroom, ceiling 102), a double (one 144 × 192 in bedroom) and a two-bedroom suite (two 120 × 144 in bedrooms and a 180 × 293 in common room, 5 in walls between). Mark them `measured_by: "Sample data, not a real suite"` (or "room"). Real suites are added through the admin builder and exported to `seed/suites/` (see A9). *(Updated 2026-11-24 for suites.)*
 
@@ -344,11 +347,12 @@ crimson3d/
 ├── schema.sql
 ├── init_db.py              # build crimson3d.db from schema.sql + seed/
 ├── create_admin.py         # python create_admin.py you@example.com
-├── export_rooms.py         # write published suite types back to seed/suites/*.json
+├── export_rooms.py         # write dorms, furniture and published suite types back to seed/
 ├── requirements.txt
 ├── seed/
+│   ├── dorms.json          # name, yard, description (added 2026-11-26)
 │   ├── furniture.json
-│   └── rooms/demo-hall-single.json, demo-hall-double.json, ...
+│   └── suites/demo-hall-single.json, demo-hall-double.json, ...
 ├── templates/
 │   ├── layout.html         # base: navbar, import map, flash messages, footer disclaimer
 │   ├── apology.html

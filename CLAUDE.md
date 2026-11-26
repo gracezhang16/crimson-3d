@@ -34,6 +34,7 @@ Crimson3D: a Flask + SQLite + three.js website where incoming Harvard first-year
 pip install -r requirements.txt
 python init_db.py                 # fresh crimson3d.db from schema.sql + seed/ (add --demo-users for showcase accounts)
 python create_admin.py you@example.com
+python export_rooms.py            # write dorms, furniture and published suites back to seed/
 flask run                         # http://127.0.0.1:5000
 pytest                            # Python tests
 node --test tests/*.test.mjs      # pure JavaScript tests

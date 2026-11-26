@@ -377,3 +377,13 @@ Technical choices:
 - **Shopping-list ticks aren't saved**: they're a checklist for one shopping trip, and saving them would need a new table for little gain.
 - **The SQL groups by column position** (`GROUP BY 1, 2, 3, 4, 5`) because `width`, `depth` and `height` exist in both `furniture` and `placements`, so naming them there is ambiguous.
 - **Checked end to end**: a student saves a layout with two mini fridges and a custom floor cushion, shares it, and opens the link logged out. They see all 15 items read-only, and clicking selects nothing. After "Stop sharing" on My layouts, the old link shows "This share link doesn't work any more."
+
+## 2026-11-26 (S8: demo users and export_rooms.py)
+
+- **`export_rooms.py` writes exactly the JSON layout of the seed files**: `indent=2` for suites, one item per line for the catalog. Exporting a database freshly built from `seed/` gives back the same bytes (tested), so `git diff seed/` after an export shows only real changes. `seed/furniture.json` lost its column alignment once to get there; the data is unchanged.
+- **Positions are written as whole numbers**: `x` and `y` are REAL columns, so SQLite returns 94.0, but positions are whole inches (SPEC.md 4.4).
+- **Only published suite types are exported.** A draft is a suite still being measured, so it stays in the database. A seed file that matches no published suite type is listed in the terminal and never deleted, since deleting is the team's call.
+- **An existing seed file is matched by the dorm and name inside it**, not by file name, so the Demo Hall files keep their names. A new suite gets `<dorm>-<name>.json`. Renaming a suite in the builder therefore writes a new file and lists the old one as stale. Alternative: store the file name in the database, which would mean a schema change.
+- **The export also writes `seed/dorms.json` and `seed/furniture.json`.** Without them, a rebuild would lose dorm yards and descriptions (Dorms page) and catalog edits (A7). Custom items in a default layout are written with their label and size, since they have no slug. SPEC.md section 5 is updated with both.
+- **Demo passwords are random (`secrets.token_urlsafe(8)`) and change on every rebuild**, printed once in the terminal. A fixed password written in the repository would be a known login on any deployed copy. The demo suites D-101 and D-201 are invented numbers in the invented Demo Hall.
+- **`init_db.py` uses `argparse`** (standard library) for `--demo-users`, which also gives it `--help`.
