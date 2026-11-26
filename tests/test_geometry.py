@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import geometry  # for geometry._find_crossing in the shared outline cases
 from geometry import (
     feature_span,
     inward_normal,
@@ -498,3 +499,21 @@ def test_shared_feature_cases(case):
         features = [{"kind": "outlet", "wall": 0, "offset": 1}] * 41
     room = {"name": "Room", "kind": "bedroom", "outline": case.get("outline", RECT), "features": features}
     assert validate_room(room, 102) == case["expected"]
+
+
+# ---------------------------------------------------------------------------
+# Shared outline cases (A8): the same file is checked against
+# builder/outline.js findCrossing in tests/outline.test.mjs, so the builder's
+# live "walls cross" messages match the server's.
+# ---------------------------------------------------------------------------
+
+OUTLINE_CASES = json.loads(
+    (Path(__file__).parent / "fixtures" / "outline_cases.json").read_text()
+)["cases"]
+
+
+@pytest.mark.parametrize("case", OUTLINE_CASES, ids=lambda case: case["name"])
+def test_shared_outline_cases(case):
+    # The crossing check itself, as in the JavaScript test (validate_room
+    # checks area first, so a figure of eight there reports "no area").
+    assert geometry._find_crossing(case["outline"]) == case["expected"]

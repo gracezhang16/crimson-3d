@@ -206,6 +206,19 @@ function drawRoom(room, index, box, selected, named) {
         }
       });
       drawCornerArrows(group, outline, box.margin);
+      // An invisible, wide line over each wall: clicking it jumps to that
+      // wall's length box (builder/main.js). pointer-events: stroke in the
+      // CSS makes the transparent line clickable.
+      wallSegments(outline).forEach(({ start, end }, i) => {
+        const hit = svgElement("line", {
+          x1: start[0], y1: start[1], x2: end[0], y2: end[1], class: "preview-wall-hit",
+          "data-wall": i, "vector-effect": "non-scaling-stroke",
+        });
+        const title = svgElement("title", {});
+        title.textContent = `Wall ${wallLetter(i)}: click to type its length`;
+        hit.append(title);
+        group.append(hit);
+      });
     }
   }
   if (selected) {

@@ -16,14 +16,11 @@
  */
 
 import { signedArea, wallLength, wallLetter } from "../shared/geometry.js";
+import { DIRECTIONS, findCrossing, wallsFromOutline } from "./outline.js";
 
-// One step of 1 inch in each direction, in plan coordinates (y points south).
-export const DIRECTIONS = {
-  east: [1, 0],
-  south: [0, 1],
-  west: [-1, 0],
-  north: [0, -1],
-};
+// DIRECTIONS lives in outline.js (click-to-draw uses it too); re-exported so
+// existing imports from state.js keep working.
+export { DIRECTIONS };
 
 // Limits from SPEC.md 4.2.
 const MAX_COORDINATE = 1200;   // SPEC.md 4.2: suite coordinates run 0 to 1200 in
@@ -158,6 +155,12 @@ export function outlineFromWalls(walls) {
   // screen gives a positive signed area (see shared/geometry.js).
   if (closed && signedArea(outline) < 0) {
     errors.push("These walls go counter-clockwise. Walk the other way, keeping the room on your right.");
+  }
+  // Walls that cross (SPEC.md 9.2), in the server's words. Skipped when a
+  // wall doubles back, which is already reported above in plainer words.
+  if (closed && errors.length === 0) {
+    const crossing = findCrossing(outline);
+    if (crossing) errors.push(crossing);
   }
   return { outline, errors, openEnd };
 }
@@ -559,16 +562,12 @@ function roomToForm(room) {
   if (outline.length === 4 && JSON.stringify(outline) === JSON.stringify(rectangleOutline(width, length))) {
     return { ...base, shape: "rectangle", width: String(width), length: String(length), walls: [] };
   }
-  const walls = [];
-  for (let i = 0; i < outline.length; i++) {
-    const [x1, y1] = outline[i];
-    const [x2, y2] = outline[(i + 1) % outline.length];
-    const [dx, dy] = [x2 - x1, y2 - y1];
-    if (dx !== 0 && dy !== 0) {
-      return null; // an angled wall
-    }
-    const direction = dx > 0 ? "east" : dx < 0 ? "west" : dy > 0 ? "south" : "north";
-    walls.push({ direction, length: String(Math.abs(dx + dy)) });
+  const walls = wallsFromOutline(outline);
+  if (!walls) {
+    return null; // an angled wall
   }
-  return { ...base, shape: "walls", width: "120", length: "144", walls };
+  return {
+    ...base, shape: "walls", width: "120", length: "144",
+    walls: walls.map((wall) => ({ direction: wall.direction, length: String(wall.length) })),
+  };
 }

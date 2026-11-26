@@ -387,7 +387,8 @@ crimson3d/
 │       └── builder/                                                               (Hannah)
 │           ├── main.js          # form state ↔ geometry object
 │           ├── preview.js       # draws geometry as SVG, labels walls A, B, C...
-│           └── outline.js       # Better tier: click-to-draw outlines
+│           ├── outline.js       # click-to-draw rules: snapping, closing, crossing walls (pure, tested)
+│           └── draw.js          # click-to-draw: the mouse on the preview
 ├── tests/
 │   ├── conftest.py          # temp database per test
 │   ├── test_geometry.py
@@ -585,6 +586,17 @@ The builder edits one room at a time: room tabs (and clicking a room in the prev
 
 - A mode where the admin clicks on a snapping grid (6 in) to place corners, closes the shape by clicking the first corner, then clicks any wall to type its exact length. Lengths propagate around the polygon. Enforce clockwise order (reverse if the admin drew counter-clockwise).
 - Reject self-crossing outlines with a clear message.
+
+*(Built 2026-11-26, A8.)* Decided with the team: **right angles only**. Each wall runs north, south, east or west, which covers L-shapes, alcoves and notches and keeps every room editable in "walk the walls". "Draw it on the preview" (in the room editor's Shape section) works like this:
+
+1. The admin clicks corners on a 6 in grid. Each wall snaps to the nearer of east-west and north-south.
+2. Clicking the first corner closes the shape. If the last corner isn't lined up with the first, one corner is added at a right angle.
+3. A shape drawn counter-clockwise is reversed. Crossing walls are refused, with the server's message.
+4. The closed shape fills the wall rows and the room's position. Lengths from the drawing are marked "drawn".
+5. Clicking a wall in the preview jumps to its length box.
+6. "Propagating" lengths: when a measured length is typed, the first drawn wall on the same axis after it (going clockwise) changes so the room stays closed. Walls with typed lengths never change.
+
+Walk-the-walls mode now reports crossing walls live too. Drawing needs a pointer (mouse, pen or touch); walking the walls stays the keyboard way.
 
 ### 9.3 Other admin pages
 

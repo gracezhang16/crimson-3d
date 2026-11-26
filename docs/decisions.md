@@ -396,3 +396,19 @@ Technical choices:
 - **Resizing an item doesn't move anyone's furniture**: layouts keep their positions, and the planner's rules flag anything that now overlaps or no longer fits.
 - **The Export button runs the same `export_seed` as `python export_rooms.py`** and writes into the `seed/` folder of the code the server runs from. It's meant for a team member's own computer, and the files still need committing. On a server where that folder can't be written, the page says so (status 500) instead of crashing. `app.config["SEED_DIR"]` lets the tests export into a temporary copy.
 - **The delete confirmation uses `tojson`** to put the item's name into the inline `confirm(...)`, so an apostrophe in a name can't break the JavaScript.
+
+## 2026-11-26 (A8: click-to-draw outlines)
+
+Product choice from Grace:
+
+- **Right angles only.** Every drawn wall runs north, south, east or west. Alternative: any angle (turrets, cut corners), which needs a new shape mode, a new edit path and checks that the 3D planner handles slanted walls: about twice the work before the freeze.
+
+Technical choices:
+
+- **Drawing is a tool, not a third shape.** A closed drawing becomes ordinary "walk the walls" rows plus the room's position. Saving, editing later, features and the server need no change, and the form has one source of truth.
+- **"Lengths propagate around the polygon"**: when a measured length is typed, the first wall still marked "drawn" on the same axis after the edited one (going clockwise) takes up the difference. Typed walls are never changed, so measurements are never overwritten. Each keystroke starts again from the lengths when the box got focus. Otherwise "146" typed as "1", "14", "146" would change walls on the way. Alternative: always change the opposite wall, which goes wrong in L-shapes where there are several.
+- **Closing a shape adds at most one corner**, turning from the last wall, so the shape closes at right angles without making the admin line up the last click exactly. Corners in the middle of a straight wall are dropped, and a click that carries on along the last wall moves its corner instead of adding one.
+- **Clockwise is enforced by reversing** the drawing, keeping the first corner clicked as corner 0.
+- **Crossing walls are checked in JavaScript with the same messages as the server** (`outline.findCrossing` mirrors `geometry._find_crossing`). The new shared fixture `tests/fixtures/outline_cases.json` is checked by both test suites. Walk-the-walls mode shows these errors live now too, not only on save.
+- **Mouse position to inches uses `getScreenCTM().inverse()`**, the browser's own transform behind the SVG `viewBox`, so there's no scaling maths of our own.
+- **Corners snap every 6 in, but grid lines are drawn every 12 in**, to keep the grid readable.

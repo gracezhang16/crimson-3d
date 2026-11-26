@@ -122,6 +122,12 @@
                         <input class="form-check-input" type="radio" name="shape" id="shape-walls" value="walls">
                         <label class="form-check-label" for="shape-walls">Custom shape</label>
                     </div>
+                    {# A8: draw the outline with the mouse instead (builder/draw.js). #}
+                    <button type="button" id="draw-button" class="btn btn-sm btn-outline-secondary ms-sm-2 mt-2 mt-sm-0"
+                            data-action="draw-room" aria-describedby="draw-help">Draw it on the preview</button>
+                    <div id="draw-help" class="form-text">
+                        Click corners on the preview to sketch an odd-shaped room, then type the measured lengths.
+                    </div>
                 </div>
 
                 {# Only one of these two fieldsets is active. main.js disables the
@@ -144,6 +150,8 @@
                         Start at any corner and walk round the room <strong>clockwise</strong>,
                         keeping the room on your right. For each wall, give its direction and
                         tape-measured length. Wall A is the first wall you walk along.
+                        Lengths marked <span class="badge text-bg-light border">drawn</span> come from a
+                        drawing: as you type measured lengths, they change to keep the room closed.
                     </p>
                     <table class="table table-sm align-middle mb-2">
                         <thead>
@@ -257,6 +265,16 @@
                     <h2 class="h5">Preview</h2>
                     <svg id="preview" class="border rounded w-100" role="img"
                          aria-label="Floor plan of the room, drawn to scale"></svg>
+                    {# Shown while drawing (A8). Backspace and Escape do the same. #}
+                    <div id="draw-tools" class="d-flex gap-2 mt-2" hidden>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-action="undo-corner">
+                            Undo corner <kbd>⌫</kbd>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-action="cancel-drawing">
+                            Cancel drawing <kbd>Esc</kbd>
+                        </button>
+                    </div>
+                    <p id="draw-hint" class="small mt-2 mb-0" aria-live="polite" hidden></p>
                     {# Live summary or problems, announced to screen readers as they change. #}
                     <div id="preview-status" class="mt-2 small" aria-live="polite"></div>
                     <p class="small text-body-secondary mt-2 mb-0">
@@ -304,6 +322,7 @@
                     <input type="number" class="form-control wall-length" min="1" max="600" step="1"
                            inputmode="numeric" aria-label="Length in inches">
                     <span class="input-group-text">in</span>
+                    <span class="input-group-text wall-drawn" title="From the drawing: type the measured length" hidden>drawn</span>
                     <div class="invalid-feedback"></div>
                 </div>
             </td>

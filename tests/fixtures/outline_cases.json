@@ -1,0 +1,11 @@
+{
+  "_comment": "Outline crossing cases shared by tests/test_geometry.py (geometry._find_crossing, Python) and tests/outline.test.mjs (builder/outline.js findCrossing, JavaScript). Both must give exactly these messages (null = no crossing), so the builder's live errors match what the server says on save.",
+  "cases": [
+    {"name": "rectangle", "outline": [[0, 0], [120, 0], [120, 144], [0, 144]], "expected": null},
+    {"name": "L-shape", "outline": [[0, 0], [120, 0], [120, 60], [60, 60], [60, 144], [0, 144]], "expected": null},
+    {"name": "figure of eight", "outline": [[0, 50], [100, 50], [100, 100], [50, 100], [50, 0], [0, 0]], "expected": "Walls A and D cross each other."},
+    {"name": "wall doubling back", "outline": [[0, 0], [100, 0], [50, 0], [50, 50], [0, 50]], "expected": "Walls A and B double back over each other."},
+    {"name": "corner touching another wall", "outline": [[0, 0], [120, 0], [120, 100], [60, 100], [60, 0], [30, 0], [30, 100], [0, 100]], "expected": "Walls A and D cross each other."},
+    {"name": "notch closing on itself", "outline": [[0, 0], [120, 0], [120, 120], [60, 120], [60, 60], [120, 60], [120, 30], [0, 30]], "expected": "Walls B and E cross each other."}
+  ]
+}

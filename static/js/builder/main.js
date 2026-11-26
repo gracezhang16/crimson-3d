@@ -9,10 +9,16 @@
  *
  * One "input" listener on the whole form catches typing in any field, because
  * input events bubble up from the field to the form ("event delegation").
+ *
+ * A8: "Draw it on the preview" hands the preview to draw.js until the shape
+ * is closed or drawing is cancelled; the drawn outline then fills the wall
+ * rows, marked "drawn" until a measured length is typed (outline.closeWalk).
  */
 
 import { formatFeetInches } from "../shared/units.js";
 import { signedArea, wallLetter } from "../shared/geometry.js";
+import { startDrawing } from "./draw.js";
+import { closeWalk, wallsFromOutline } from "./outline.js";
 import { drawSuite } from "./preview.js";
 import {
   buildSuite, geometryToForm, newRoom, parseInches, parseRoom, positionNextTo, rectangleWalls, wallProblem,
@@ -43,10 +49,15 @@ const saveBlocked = document.querySelector("#save-blocked");
 const roomTabs = document.querySelector("#room-tabs");
 const placeNextTo = document.querySelector("#place-next-to");
 const placeRoom = document.querySelector("#place-room");
+const drawButton = document.querySelector("#draw-button");
+const drawTools = document.querySelector("#draw-tools");
+const drawHint = document.querySelector("#draw-hint");
 
 let rooms = [newRoom("Bedroom A")]; // every room's typed values (see state.newRoom)
 let selected = 0;                     // the room shown in the editor
 let built = null;                     // the latest buildSuite() result
+let drawing = null;                   // while drawing: draw.js's controls (undo, cancel)
+let walkBefore = null;                // wall lengths when a length box got focus (keepWalkClosed)
 
 /**
  * Look up a form field by its name attribute.
@@ -86,6 +97,7 @@ function readEditor() {
     walls: [...wallRows.querySelectorAll(".wall-row")].map((row) => ({
       direction: row.querySelector(".wall-direction").value,
       length: row.querySelector(".wall-length").value,
+      drawn: row.dataset.drawn === "true",
     })),
     features: featureBodies().map((body) => {
       const value = (name) => body.querySelector(`[data-field="${name}"]`).value;
@@ -114,7 +126,7 @@ function writeEditor(room) {
   showShapeFields(room.shape);
 
   wallRows.replaceChildren();
-  room.walls.forEach((wall) => addWallRow(wall.direction, wall.length));
+  room.walls.forEach((wall) => addWallRow(wall.direction, wall.length, wall.drawn));
 
   featureBodies().forEach((body) => body.remove());
   room.features.forEach(() => addFeature());
@@ -140,11 +152,13 @@ function wallCount(room) {
  *
  * @param {string} direction
  * @param {number | string} length
+ * @param {boolean} [drawn] - the length comes from a drawing, not a tape measure
  */
-function addWallRow(direction = "east", length = "") {
+function addWallRow(direction = "east", length = "", drawn = false) {
   const row = rowTemplate.content.firstElementChild.cloneNode(true);
   row.querySelector(".wall-direction").value = direction;
   row.querySelector(".wall-length").value = length;
+  row.dataset.drawn = String(Boolean(drawn));
   wallRows.append(row);
 }
 
@@ -169,7 +183,64 @@ function refreshRows(walls) {
     const problem = input.value === "" ? null : wallProblem(walls[i]);
     input.classList.toggle("is-invalid", Boolean(problem));
     row.querySelector(".invalid-feedback").textContent = problem ?? "";
+    row.querySelector(".wall-drawn").hidden = row.dataset.drawn !== "true";
   });
+}
+
+/**
+ * Remember every wall's length when a length box gets focus, so that
+ * keepWalkClosed() works from the lengths before this edit, not from the
+ * half-typed values in between ("1", "14", "146").
+ */
+function rememberWalk() {
+  walkBefore = [...wallRows.querySelectorAll(".wall-length")].map((input) => input.value);
+}
+
+/**
+ * After a wall's length is typed: it now counts as measured, and if the walk
+ * no longer closes, the nearest drawn wall on the same axis is changed to
+ * close it again (outline.closeWalk). Each keystroke starts again from the
+ * lengths before this edit (rememberWalk), so only the final number counts.
+ * Changed rows flash briefly.
+ *
+ * @param {HTMLInputElement} input - the .wall-length box just typed in
+ */
+function keepWalkClosed(input) {
+  const rows = [...wallRows.querySelectorAll(".wall-row")];
+  const index = rows.indexOf(input.closest(".wall-row"));
+  rows[index].dataset.drawn = "false";
+  const drawn = rows.map((row) => row.dataset.drawn === "true");
+  if (!drawn.some(Boolean) || walkBefore?.length !== rows.length) {
+    return;
+  }
+  const lengthBox = (row) => row.querySelector(".wall-length");
+  // Put the drawn walls back to their lengths before this edit, then close.
+  rows.forEach((row, j) => {
+    if (drawn[j]) lengthBox(row).value = walkBefore[j];
+  });
+  const walls = rows.map((row) => ({
+    direction: row.querySelector(".wall-direction").value,
+    length: parseInches(lengthBox(row).value),
+  }));
+  const result = closeWalk(walls, index, drawn);
+  for (const j of result?.adjusted ?? []) {
+    lengthBox(rows[j]).value = result.lengths[j];
+    rows[j].classList.remove("wall-adjusted");
+    void rows[j].offsetWidth; // restart the CSS highlight if it's still running
+    rows[j].classList.add("wall-adjusted");
+  }
+}
+
+/**
+ * Jump to the box holding wall i's length (clicked in the preview).
+ * @param {number} i
+ */
+function focusWall(i) {
+  const input = field("shape").value === "walls"
+    ? wallRows.querySelectorAll(".wall-length")[i]
+    : field(i % 2 === 0 ? "width" : "length"); // a rectangle: A and C are its width, B and D its length
+  input?.focus();
+  input?.select();
 }
 
 /**
@@ -361,7 +432,9 @@ function update() {
   const tab = roomTabs.querySelector(`[data-room="${selected}"]`);
   if (tab) tab.textContent = rooms[selected].name.trim() || `Room ${selected + 1}`;
   showStatus(built.geometry, built.errors);
-  drawSuite(svg, built.rooms, selected);
+  if (!drawing) {
+    drawSuite(svg, built.rooms, selected); // while drawing, draw.js owns the preview
+  }
   // Only a complete, valid suite goes into the hidden field the server reads.
   field("geometry").value = built.errors.length || !built.geometry ? "" : JSON.stringify(built.geometry);
 }
@@ -384,10 +457,78 @@ function setShape(shape) {
 }
 
 // ---------------------------------------------------------------------------
+// Drawing the selected room on the preview (A8)
+// ---------------------------------------------------------------------------
+
+/**
+ * Show a line of instructions (or a problem) under the preview.
+ * @param {string} text
+ * @param {boolean} [isError]
+ */
+function showHint(text, isError = false) {
+  drawHint.hidden = false;
+  drawHint.textContent = text;
+  drawHint.classList.toggle("text-danger", isError);
+}
+
+/** Hand the preview to draw.js, with the suite's other rooms shown for reference. */
+function startDraw() {
+  rooms[selected] = readEditor();
+  const others = built.rooms
+    .filter((room, i) => i !== selected && room.outline && !room.openEnd)
+    .map((room) => ({ name: room.name, outline: room.outline }));
+  drawTools.hidden = false;
+  drawButton.disabled = true;
+  status.hidden = true; // the summary is about the old shape until drawing ends
+  drawing = startDrawing(svg, { others, hint: showHint, onClose: finishDrawing, onCancel: endDrawing });
+  svg.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+/** Give the preview back to the builder. */
+function endDrawing() {
+  drawing = null;
+  drawTools.hidden = true;
+  drawButton.disabled = false;
+  status.hidden = false;
+  drawHint.hidden = true;
+  update();
+}
+
+/**
+ * The shape is closed: it becomes this room's walls (marked drawn) and
+ * position, and the admin carries on by typing measured lengths.
+ *
+ * @param {number[][]} outline - clockwise, in suite inches
+ */
+function finishDrawing(outline) {
+  field("room_x").value = Math.min(...outline.map(([x]) => x));
+  field("room_y").value = Math.min(...outline.map(([, y]) => y));
+  document.querySelector("#shape-walls").checked = true;
+  showShapeFields("walls");
+  wallRows.replaceChildren();
+  wallsFromOutline(outline).forEach((wall) => addWallRow(wall.direction, wall.length, true));
+  endDrawing();
+  showHint(`Shape drawn: ${outline.length} walls. Now type each wall's measured length (or click a wall here). `
+    + "Walls still marked “drawn” adjust to keep the room closed.");
+  wallRows.querySelector(".wall-length").focus();
+}
+
+// ---------------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------------
 
-form.addEventListener("input", update);
+// focusin is "focus" that bubbles, so one listener on the form hears it.
+form.addEventListener("focusin", (event) => {
+  if (event.target.classList.contains("wall-length")) {
+    rememberWalk();
+  }
+});
+form.addEventListener("input", (event) => {
+  if (event.target.classList.contains("wall-length")) {
+    keepWalkClosed(event.target);
+  }
+  update();
+});
 form.addEventListener("change", (event) => {
   if (event.target.name === "shape") {
     setShape(event.target.value);
@@ -395,7 +536,21 @@ form.addEventListener("change", (event) => {
 });
 form.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]");
-  switch (button?.dataset.action) {
+  const action = button?.dataset.action;
+  // Any other button (switching rooms, adding walls...) ends a drawing first.
+  if (drawing && action && action !== "undo-corner" && action !== "cancel-drawing") {
+    drawing.cancel();
+  }
+  switch (action) {
+    case "draw-room":
+      startDraw();
+      break;
+    case "undo-corner":
+      drawing?.undo();
+      break;
+    case "cancel-drawing":
+      drawing?.cancel();
+      break;
     case "select-room":
       selectRoom(Number(button.dataset.room));
       break;
@@ -429,8 +584,14 @@ form.addEventListener("click", (event) => {
     default:
   }
 });
-// Clicking a room in the preview edits it.
+// Clicking a wall of the room being edited jumps to its length; clicking
+// another room edits that room.
 svg.addEventListener("click", (event) => {
+  const wall = event.target.closest("[data-wall]");
+  if (wall) {
+    focusWall(Number(wall.dataset.wall));
+    return;
+  }
   const room = event.target.closest("[data-room]");
   if (room && Number(room.dataset.room) !== selected) {
     selectRoom(Number(room.dataset.room));

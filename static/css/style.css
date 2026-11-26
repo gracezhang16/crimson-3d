@@ -504,6 +504,70 @@ kbd {
     text-transform: uppercase;
 }
 
+/* Clicking a wall of the room being edited jumps to its length box. The
+   line is invisible but wide, and pointer-events: stroke makes it clickable. */
+.preview-wall-hit {
+    stroke: transparent;
+    stroke-width: 14;
+    pointer-events: stroke;
+    cursor: pointer;
+}
+
+.preview-wall-hit:hover {
+    stroke: rgb(165 28 48 / 25%);
+}
+
+/* Drawing a room's outline on the preview (A8, builder/draw.js). */
+.builder-preview svg.is-drawing {
+    cursor: crosshair;
+}
+
+.draw-other-room {
+    fill: #f1ede6;
+    stroke: #b9b2a6;
+    stroke-width: 1.5;
+}
+
+.draw-walls {
+    fill: none;
+    stroke: #1b2230;
+    stroke-width: 2.5;
+    stroke-linejoin: miter;
+}
+
+.draw-guide {
+    stroke: var(--crimson-bright);
+    stroke-width: 2;
+    stroke-dasharray: 6 4;
+}
+
+.draw-corner,
+.draw-pointer {
+    fill: #1b2230;
+}
+
+.draw-pointer {
+    fill: var(--crimson-bright);
+}
+
+/* The first corner: a ring to click to close the shape. */
+.draw-first-corner {
+    fill: #fff;
+    stroke: var(--crimson-bright);
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+}
+
+/* A wall row whose length was just changed to keep the room closed. */
+.wall-row.wall-adjusted td {
+    animation: wall-adjusted 1.2s ease-out;
+}
+
+@keyframes wall-adjusted {
+    from { background-color: rgb(255 214 102 / 60%); }
+    to { background-color: transparent; }
+}
+
 /* Keep the sticky preview just below the (also sticky) navbar on wide
    screens, and under it when they meet, not on top of it. */
 .builder-preview.sticky-lg-top {
