@@ -22,9 +22,10 @@
             <div class="mb-3">
                 <label for="password" class="form-label">Password</label>
                 <input id="password" name="password" type="password" class="form-control"
-                       autocomplete="new-password" minlength="8" required
+                       autocomplete="new-password" minlength="6" required
                        aria-describedby="password-help">
-                <div id="password-help" class="form-text">At least 8 characters.</div>
+                {# Keep in step with MIN_PASSWORD_LENGTH in helpers.py, which the server checks. #}
+                <div id="password-help" class="form-text">At least 6 characters.</div>
             </div>
             <div class="mb-3">
                 <label for="confirmation" class="form-label">Confirm password</label>

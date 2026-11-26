@@ -115,7 +115,13 @@ def test_register_rejects_mismatched_confirmation(client):
 def test_register_rejects_short_password(client):
     response = register(client, password="short")
     assert response.status_code == 400
-    assert "at least 8 characters" in response.get_data(as_text=True)
+    assert "at least 6 characters" in response.get_data(as_text=True)
+
+
+def test_register_accepts_a_six_character_password(client):
+    response = register(client, password="abc123")
+    assert response.status_code == 302
+    assert db.execute("SELECT COUNT(*) AS n FROM users WHERE email = 'new@example.com'")[0]["n"] == 1
 
 
 def test_register_rejects_missing_fields(client):

@@ -434,3 +434,7 @@ Technical choices:
 - **Skipping**: any pointerdown in the 3D view, or any key, finishes every tween at once. The capture phase means the click then works as normal.
 - **Reduced motion**: with the system setting on, every tween jumps straight to its end (SPEC.md 8.7, 11).
 - **Checked in headless Chrome** with the page's animation clock slowed 5× (test only) to catch each stage. The last frame matches the reduced-motion frame exactly.
+
+## 2026-11-26 (Shorter passwords)
+
+- **Passwords now need at least 6 characters (was 8)**, Grace's call, so they're easier to type during demos. It's still the only rule, checked on the server (`helpers.MIN_PASSWORD_LENGTH`, shared by Register and `create_admin.py`). The form's `minlength` matches but is only a convenience. Alternatives offered: 4 characters, or no minimum.

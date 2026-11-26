@@ -24,7 +24,7 @@ if not os.path.isfile(DATABASE_URL.removeprefix("sqlite:///")):
 db = SQL(DATABASE_URL)
 
 
-MIN_PASSWORD_LENGTH = 8
+MIN_PASSWORD_LENGTH = 6
 
 
 def normalize_email(text):
