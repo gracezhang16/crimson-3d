@@ -12,9 +12,13 @@
  * SPEC.md 4.4 format, the item's size and colour (rules.itemDimensions), its
  * three.js group (furniture.makeFurniture), and its issue from
  * rules.evaluate() ("Blocks the door", ...) or null if it fits.
+ *
+ * With an animator (animate.js), added items pop in and deleted ones shrink
+ * away. Only their look is animated; the entries change straight away.
  */
 
 import * as THREE from "three";
+import { popIn, shrinkAway } from "./animate.js";
 import { makeFurniture, setIssueTint, setLabelVisible } from "./furniture.js";
 import { evaluate, findFreeSpot, footprint, footprintBox, itemDimensions, snap, zones } from "./rules.js";
 
@@ -26,14 +30,19 @@ const SELECTION_MARGIN = 1.5;      // inches between the item and its outline
  * @param {Map<number, object>} catalogById - /api/furniture rows by id
  * @param {THREE.Scene} scene
  * @param {() => void} requestRender
+ * @param {ReturnType<import("./animate.js").createAnimator> | null} [animator] - null: no animations
  */
-export function createLayout(geometry, catalogById, scene, requestRender) {
+export function createLayout(geometry, catalogById, scene, requestRender, animator = null) {
   // Every room's outline: items may go anywhere inside any room.
   const outlines = geometry.rooms.map((room) => room.outline);
   const furniture = new THREE.Group();
   scene.add(furniture);
   const outlineMesh = makeSelectionOutline();
   scene.add(outlineMesh);
+  // Deleted items shrink away in here: in the scene, but not in `furniture`,
+  // so they can't be clicked while they go.
+  const leaving = new THREE.Group();
+  scene.add(leaving);
 
   let entries = [];
   let selected = null;
@@ -127,6 +136,7 @@ export function createLayout(geometry, catalogById, scene, requestRender) {
       const item = itemDimensions({ furniture_id: catalogItem.id }, catalogById);
       const spot = findFreeSpot(item, 0, outlines, blockers());
       selected = addEntry({ furniture_id: catalogItem.id, x: spot.x, y: spot.y, rotation: 0 });
+      if (animator && selected) popIn(animator, selected.group);
       changed(true);
     },
 
@@ -139,6 +149,7 @@ export function createLayout(geometry, catalogById, scene, requestRender) {
       const size = { ...custom, clearance: 0 };
       const spot = findFreeSpot(size, 0, outlines, blockers());
       selected = addEntry({ furniture_id: null, ...custom, x: spot.x, y: spot.y, rotation: 0 });
+      if (animator && selected) popIn(animator, selected.group);
       changed(true);
     },
 
@@ -182,7 +193,13 @@ export function createLayout(geometry, catalogById, scene, requestRender) {
 
     /** @param {object} entry */
     remove(entry) {
-      furniture.remove(entry.group);
+      if (animator) {
+        const { group } = entry;
+        leaving.add(group); // add() also takes it out of `furniture`
+        shrinkAway(animator, group, () => leaving.remove(group));
+      } else {
+        furniture.remove(entry.group);
+      }
       entries = entries.filter((other) => other !== entry);
       if (selected === entry) {
         selected = null;

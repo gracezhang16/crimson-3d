@@ -418,3 +418,19 @@ Technical choices:
 - **Automated sweep before the freeze**: every page as a visitor, a student and an admin, at 1280 px and 390 px (phone) width, in headless Chrome. It checked for console errors, status codes, sideways scrolling, form fields without labels, buttons without text, duplicate ids and one `h1` per page. All 23 pages passed at both widths.
 - **My layouts turns into stacked blocks on phones** (`.stack-table`, CSS only). The table used to hide Open, Share and Delete off the right edge inside its own scroll area. Each cell shows its column name from a `data-label` attribute. The markup is unchanged, so `layouts.js` still finds rows with `closest("tr")`. The admin tables keep scrolling sideways on phones, since admins build suites on a computer.
 - **Removed the faint crimson wash** behind the top of every page (from the redesign). Under the black navbar only its tail showed, and it looked like a smudge.
+
+## 2026-11-26 (Planner animations)
+
+Product choices from Grace: walls rise, then the furniture drops in. Added items pop in, deleted items shrink away, and share links play the opening too. (Alternatives offered: everything popping up in place, or sliding in through the door.)
+
+Technical choices:
+
+- **Hand-written tweens, no animation library**: `animate.js` holds the easing curves (ease-out, overshoot "back", a fall with one bounce) and a small runner. The maths is pure and tested under node. No new dependency.
+- **Only the look is animated** (a group's height off the floor, its scale, the room group's vertical scale). Placements change immediately, so saving, `rules.evaluate` and the shopping list never see an animation.
+- **"Walls rise" scales the whole room group vertically.** Floors are flat, so only walls, doors and windows grow. This works alongside the dollhouse rule, which changes individual walls, without touching room.js.
+- **The runner draws frames only while something moves**, then the planner goes back to drawing on demand. A tween's clock starts at its first frame, so a slow page load doesn't eat the start of the show.
+- **Biggest pieces fall first**, and the stagger shrinks for crowded suites, so the show stays under about 1.6 s whatever the number of items.
+- **Deleted items shrink in a separate group** outside the clickable furniture, so they can't be clicked on their way out.
+- **Skipping**: any pointerdown in the 3D view, or any key, finishes every tween at once. The capture phase means the click then works as normal.
+- **Reduced motion**: with the system setting on, every tween jumps straight to its end (SPEC.md 8.7, 11).
+- **Checked in headless Chrome** with the page's animation clock slowed 5× (test only) to catch each stage. The last frame matches the reduced-motion frame exactly.

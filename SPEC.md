@@ -559,6 +559,11 @@ New items appear at the first free spot found by scanning the room on a 6 in gri
 
 - "3D" and "Floor plan" toggle. Floor plan animates the camera to straight overhead (respect `prefers-reduced-motion` by jumping instead).
 - Zoom buttons for people without a scroll wheel.
+- *(Added 2026-11-26.)* **Animations** (`planner/animate.js`):
+  - When a suite opens (in every mode, share links included), the walls grow up from the floor in about 0.45 s. Then the furniture drops in one piece after another, biggest first, each with one small bounce. The whole show lasts about 1.5 s.
+  - Items added from the panel pop in (0.3 s). Deleted items shrink away (0.2 s).
+  - Only the look is animated; positions, rules and saving are unaffected. Any click or key in the planner skips to the end.
+  - With `prefers-reduced-motion`, everything appears in place at once.
 
 ### 8.8 If WebGL is unavailable
 

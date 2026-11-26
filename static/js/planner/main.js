@@ -11,6 +11,7 @@
 import { apiFetch } from "../shared/api.js";
 import { attachInteraction } from "./interaction.js";
 import { createRoomLabels, createWallLabels } from "./labels.js";
+import { createAnimator, playIntro } from "./animate.js";
 import { createLayout } from "./layout.js";
 import { createItemList, createPanel, createShoppingList } from "./panel.js";
 import { buildRoom } from "./room.js";
@@ -103,8 +104,16 @@ async function start(canvas, config) {
   const room = buildRoom(geometry);
   view.scene.add(room.group);
 
-  const layout = createLayout(geometry, catalogById, view.scene, view.requestRender);
+  const animator = createAnimator(view.requestRender);
+  const layout = createLayout(geometry, catalogById, view.scene, view.requestRender, animator);
   layout.load(placements);
+  // The opening show (animate.js): walls rise, then the furniture drops in.
+  // Any click or key in the 3D view skips to the end. "capture" runs this
+  // before the planner's own pointer handling, so the click then works normally.
+  playIntro(animator, room.group, layout.entries());
+  const skip = () => { if (animator.busy()) animator.finishAll(); };
+  canvas.addEventListener("pointerdown", skip, { capture: true });
+  window.addEventListener("keydown", skip, { capture: true });
   if (config.mode === "view") {
     // Share page: look, don't touch (SPEC.md 8.1). No picking or dragging.
     createItemList(layout);
