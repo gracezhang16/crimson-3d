@@ -560,6 +560,12 @@ Sections, top to bottom: room facts; Harvard furniture (add buttons); things to 
 
 New items appear at the first free spot found by scanning the room on a 6 in grid; if none, at the centre.
 
+*(Added 2026-11-26.)* **Suites come furnished:** when a suite type has no default layout (an empty one), the planner fills it with the furniture Harvard supplies (`planner/furnish.js`). This applies to students and to the admin's Default layout page. An admin's saved default always wins.
+- The suite's capacity is shared across its bedrooms, extra students to the biggest. Common rooms and hallways get nothing.
+- Each student gets a bed, desk, desk chair, dresser, bookcase and floor lamp, plus a wardrobe in a bedroom with no closet.
+- Pieces go biggest first at the first free spot in their bedroom (turned 90° if that's the only way they fit), clear of door, closet and radiator zones. Each desk chair goes in front of its desk.
+- A piece that can't fit is left out rather than overlapping.
+
 ### 8.7 Views
 
 - "3D" and "Floor plan" toggle. Floor plan animates the camera to straight overhead (respect `prefers-reduced-motion` by jumping instead).

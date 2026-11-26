@@ -12,6 +12,7 @@ import { apiFetch } from "../shared/api.js";
 import { attachInteraction } from "./interaction.js";
 import { createRoomLabels, createWallLabels } from "./labels.js";
 import { createAnimator, playIntro } from "./animate.js";
+import { furnish } from "./furnish.js";
 import { createItemTools } from "./itemTools.js";
 import { createLayout } from "./layout.js";
 import { createItemList, createPanel, createShoppingList } from "./panel.js";
@@ -63,8 +64,13 @@ async function loadPlan(config) {
     apiFetch("/api/furniture"),
     config.layoutId ? apiFetch(`/api/layouts/${config.layoutId}`) : null,
   ]);
-  // A saved layout if one was asked for, otherwise the suite's default.
-  const placements = saved ? saved.placements : roomType.default_layout.placements;
+  // A saved layout if one was asked for, otherwise the suite's default. A
+  // suite type nobody has arranged yet comes furnished with the furniture
+  // Harvard supplies (furnish.js), so no one opens a bare suite.
+  let placements = saved ? saved.placements : roomType.default_layout.placements;
+  if (!saved && placements.length === 0) {
+    placements = furnish(roomType.geometry, roomType.capacity, catalog);
+  }
   return { geometry: roomType.geometry, placements, catalog, saved };
 }
 
