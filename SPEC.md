@@ -547,6 +547,7 @@ A suite's rooms are drawn together in one plan. Every wall, between rooms or out
   - Overlaps are still flagged by `rules.evaluate`, for those cases.
 - **Rotate:** button and the R key, 90° clockwise. If the turned item would hit other furniture, it doesn't turn, and the panel says what it would hit.
 - **Delete:** button and Delete/Backspace.
+- *(Added 2026-11-26.)* **Item toolbar:** Rotate and Delete buttons float just above the selected item in the 3D view (`planner/itemTools.js`), following it as it moves and as the view turns. They do the same as the panel's buttons. Not shown on share pages.
 - **Keyboard move:** arrow keys move the selected item 1 in, Shift + arrow 6 in.
 - **Escape** clears the selection. Clicking empty floor without dragging clears it too.
 - Touch works through pointer events; set `touch-action: none` on the canvas.

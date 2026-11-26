@@ -12,6 +12,7 @@ import { apiFetch } from "../shared/api.js";
 import { attachInteraction } from "./interaction.js";
 import { createRoomLabels, createWallLabels } from "./labels.js";
 import { createAnimator, playIntro } from "./animate.js";
+import { createItemTools } from "./itemTools.js";
 import { createLayout } from "./layout.js";
 import { createItemList, createPanel, createShoppingList } from "./panel.js";
 import { buildRoom } from "./room.js";
@@ -114,12 +115,14 @@ async function start(canvas, config) {
   const skip = () => { if (animator.busy()) animator.finishAll(); };
   canvas.addEventListener("pointerdown", skip, { capture: true });
   window.addEventListener("keydown", skip, { capture: true });
+  let tools = null; // Rotate / Delete over the selected item (not on share pages)
   if (config.mode === "view") {
     // Share page: look, don't touch (SPEC.md 8.1). No picking or dragging.
     createItemList(layout);
   } else {
     attachInteraction({ canvas, camera: view.camera, controls: view.controls, layout });
     createPanel(layout, catalog);
+    tools = createItemTools(container, layout);
   }
   createShoppingList(layout);
   if (config.mode === "edit" && config.loggedIn) {
@@ -138,6 +141,7 @@ async function start(canvas, config) {
     room.update(camera, focus.current(), view.view() === "plan");
     labels.update(camera);
     roomLabels.update(camera);
+    tools?.update(camera);
   });
   view.fitCamera(room.bounds);
 }

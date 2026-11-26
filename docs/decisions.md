@@ -449,3 +449,13 @@ Product choice from Grace: furniture can't be dragged into other furniture any m
 - **A turn that would hit furniture is refused**, with "No room to turn it here: it would hit the futon." in the panel. Alternative: turn and then push it to the nearest free spot, which would move it somewhere the student didn't choose.
 - **Stopping points are whole inches** (positions are whole inches, SPEC.md 4.4), so an item can stop up to 1 in short of touching when the other item's edge falls on a half inch.
 - **Unchanged**: walls between rooms, doors, closets and radiators still don't block. They're flagged as before ("Crosses a wall", "Blocks the door"). The server doesn't check overlaps either; this is planner behaviour, so the contract (SPEC.md section 4) is unchanged.
+
+## 2026-11-26 (Rotate and Delete over the selected item)
+
+Product request from Grace: Rotate and Delete next to the furniture, so you don't have to go to the side panel.
+
+- **An HTML toolbar over the canvas, not 3D buttons**: like the wall labels, it's positioned each frame by projecting the point just above the item's top through the camera (`itemTools.js`). It stays crisp, uses ordinary `<button>`s (keyboard focus, `aria-label`s, tooltips with the shortcut keys), and follows the item while it's dragged, nudged or the view turns. It hides when the item is off screen or behind the camera.
+- **The same actions as the panel** (`layout.rotate`, `layout.remove`), so solid furniture ("No room to turn it here"), the delete animation and unsaved-changes tracking all behave the same. The panel buttons stay for anyone who prefers them.
+- **Icons are inline SVG** (a turning arrow and a bin). No icon font or new files.
+- **Sits above the wall and room-name labels** (`z-index: 2`), so a label can never cover a button.
+- **Not on share pages**, which are read-only.

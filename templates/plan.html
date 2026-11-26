@@ -179,6 +179,24 @@
                     <button type="button" class="btn btn-light" data-zoom="out" aria-label="Zoom out">−</button>
                 </div>
             </div>
+            {% if mode != "view" %}
+                {# Rotate and Delete just above the selected item; itemTools.js moves
+                   it there every frame. The icons are drawn inline as SVG. #}
+                <div id="item-tools" class="item-tools" role="toolbar" aria-label="Selected item" hidden>
+                    <button type="button" class="btn" data-tool="rotate" aria-label="Rotate 90°" title="Rotate 90° (R)">
+                        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor"
+                             stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M12.4 1.4v3.3H9.1"/>
+                        </svg>
+                    </button>
+                    <button type="button" class="btn item-tools-delete" data-tool="delete" aria-label="Delete" title="Delete (Delete key)">
+                        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor"
+                             stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M2.5 4h11M6.2 4V2.5h3.6V4M4 4l.7 9.5h6.6L12 4M6.6 6.8v4.2M9.4 6.8v4.2"/>
+                        </svg>
+                    </button>
+                </div>
+            {% endif %}
             {# "Everything fits" or "N items don't fit" (SPEC.md 4.5 rule 8); panel.js
                fills it, and screen readers announce changes. #}
             <div id="fit-status" class="fit-pill" role="status" aria-live="polite" hidden></div>
