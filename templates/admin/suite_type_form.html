@@ -108,7 +108,6 @@
                         <select id="room-kind" name="room_kind" class="form-select">
                             <option value="bedroom">Bedroom</option>
                             <option value="common">Common room</option>
-                            <option value="hallway">Hallway</option>
                         </select>
                     </div>
                 </div>
@@ -168,15 +167,11 @@
                     <button type="button" class="btn btn-sm btn-outline-secondary" data-action="add-wall">Add wall</button>
                 </fieldset>
 
-                {# Rooms are arranged by dragging them in the preview (main.js,
-                   arrange.js). These boxes show the result and allow exact
-                   numbers, or arranging by keyboard. #}
-                <details class="mb-3 position-details">
-                    <summary class="h6 mb-2">Exact position in the suite</summary>
-                    <p class="small text-body-secondary mb-2">
-                        The room's north-west corner, measured from the suite's west and north sides.
-                        Dragging a room in the preview fills these in.
-                    </p>
+                <h3 class="h6">Where this room is in the suite</h3>
+                <p class="small text-body-secondary mb-2">
+                    The room's north-west corner, measured from the suite's west and north sides.
+                    Leave a gap the thickness of the wall between rooms (about 5 in).
+                </p>
                 <div class="row g-3 mb-2">
                     <div class="col-sm-6">
                         <label for="room-x" class="form-label">From the west side (in)</label>
@@ -199,9 +194,12 @@
                         <label for="place-room" class="form-label small mb-0">room</label>
                         <select id="place-room" class="form-select form-select-sm"></select>
                     </div>
+                    <div>
+                        <label for="place-gap" class="form-label small mb-0">wall between (in)</label>
+                        <input id="place-gap" type="number" class="form-control form-control-sm place-gap" min="0" max="24" value="5">
+                    </div>
                     <button type="button" class="btn btn-sm btn-outline-secondary" data-action="place-room">Place</button>
                 </div>
-                </details>
 
                 <h3 class="h6">Doors, windows and more in this room</h3>
                 <p class="small text-body-secondary mb-2">
@@ -265,29 +263,16 @@
             <div class="col-lg-5">
                 <div class="builder-preview sticky-lg-top">
                     <h2 class="h5">Preview</h2>
-                    <p class="small text-body-secondary mb-2" id="arrange-help">
-                        Drag rooms to arrange them. Near another room they snap into place, one wall apart
-                        (hold <kbd>Alt</kbd> to place freely).
-                    </p>
                     <svg id="preview" class="border rounded w-100" role="img"
                          aria-label="Floor plan of the room, drawn to scale"></svg>
-                    <div class="d-flex align-items-center gap-2 mt-2 small">
-                        <label for="wall-gap" class="mb-0">Wall thickness between rooms</label>
-                        <input id="wall-gap" type="number" class="form-control form-control-sm place-gap" min="0" max="24" step="1"
-                               value="5" inputmode="numeric">
-                        <span>in</span>
-                    </div>
                     {# Shown while drawing (A8). Backspace and Escape do the same. #}
-                    {# The flex layout is on an inner div: Bootstrap's d-flex would override `hidden`. #}
-                    <div id="draw-tools" hidden>
-                        <div class="d-flex gap-2 mt-2">
-                            <button type="button" class="btn btn-sm btn-outline-secondary" data-action="undo-corner">
-                                Undo corner <kbd>⌫</kbd>
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-secondary" data-action="cancel-drawing">
-                                Cancel drawing <kbd>Esc</kbd>
-                            </button>
-                        </div>
+                    <div id="draw-tools" class="d-flex gap-2 mt-2" hidden>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-action="undo-corner">
+                            Undo corner <kbd>⌫</kbd>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-action="cancel-drawing">
+                            Cancel drawing <kbd>Esc</kbd>
+                        </button>
                     </div>
                     <p id="draw-hint" class="small mt-2 mb-0" aria-live="polite" hidden></p>
                     {# Live summary or problems, announced to screen readers as they change. #}

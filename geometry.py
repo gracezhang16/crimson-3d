@@ -31,7 +31,7 @@ MAX_COORDINATE = 1200   # inches (100 ft), so a whole suite fits in one plan
 MAX_FEATURES = 40       # per room
 MAX_ROOMS = 8
 MAX_ROOM_NAME = 40
-ROOM_KINDS = ("bedroom", "common", "hallway")  # hallway added 2026-11-26
+ROOM_KINDS = ("bedroom", "common")
 
 # Limits for placements (SPEC.md 4.4 and 7.2).
 MAX_PLACEMENTS = 100
@@ -192,7 +192,7 @@ def validate_room(room, ceiling):
     if not isinstance(name, str) or not 1 <= len(name.strip()) <= MAX_ROOM_NAME:
         errors.append(f"Give the room a name of 1 to {MAX_ROOM_NAME} characters.")
     if room.get("kind") not in ROOM_KINDS:
-        errors.append("Room kind must be bedroom, common or hallway.")
+        errors.append("Room kind must be bedroom or common.")
 
     outline_errors = _validate_outline(room.get("outline"))
     errors.extend(outline_errors)

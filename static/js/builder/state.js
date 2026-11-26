@@ -16,7 +16,6 @@
  */
 
 import { signedArea, wallLength, wallLetter } from "../shared/geometry.js";
-import { overlapProblems } from "./arrange.js";
 import { DIRECTIONS, findCrossing, wallsFromOutline } from "./outline.js";
 
 // DIRECTIONS lives in outline.js (click-to-draw uses it too); re-exported so
@@ -33,7 +32,7 @@ const MAX_FEATURES = 40;
 const SINGLE_ROOM_NAME = "Main room"; // buildGeometry()'s one room
 const MAX_ROOMS = 8;
 const MAX_ROOM_NAME = 40;
-export const ROOM_KINDS = ["bedroom", "common", "hallway"]; // geometry.py ROOM_KINDS (hallway added 2026-11-26)
+export const ROOM_KINDS = ["bedroom", "common"];
 const EPSILON = 1e-9; // as in geometry.py: diagonal wall lengths aren't whole numbers
 
 export const FEATURE_KINDS = ["door", "window", "closet", "radiator", "outlet"];
@@ -351,10 +350,8 @@ function validateHeights(feature, name, ceiling) {
  * @returns {object}
  */
 export function newRoom(name, kind = "bedroom", position = { x: 0, y: 0 }) {
-  // A hallway starts long and thin (4 × 15 ft); other rooms 10 × 12 ft.
-  const [width, length] = kind === "hallway" ? ["48", "180"] : ["120", "144"];
   return {
-    name, kind, shape: "rectangle", width, length,
+    name, kind, shape: "rectangle", width: "120", length: "144",
     x: String(position.x), y: String(position.y), walls: [], features: [],
   };
 }
@@ -411,8 +408,8 @@ function roomOutline({ shape, width, length, walls }) {
  *
  * Each room's outline is built from its shape, then moved so its north-west
  * corner is at the room's position (x, y). Problems are checked the same way
- * as on the server (geometry.validate_suite), including rooms that overlap
- * (arrange.overlapProblems, added 2026-11-26 with dragging rooms). When the
+ * as on the server (geometry.validate_suite), except overlap between rooms,
+ * which only the server checks (the preview shows it plainly). When the
  * suite has several rooms, problems start with the room's name.
  *
  * @param {{ceiling: number, rooms: object[]}} suite - rooms from parseRoom()
@@ -437,7 +434,7 @@ export function buildSuite({ ceiling, rooms }) {
       roomErrors.push(`Give the room a name of 1 to ${MAX_ROOM_NAME} characters.`);
     }
     if (!ROOM_KINDS.includes(room.kind)) {
-      roomErrors.push("Room kind must be bedroom, common or hallway.");
+      roomErrors.push("Room kind must be bedroom or common.");
     }
     const positionOk = isWholeBetween(room.x, 0, MAX_COORDINATE) && isWholeBetween(room.y, 0, MAX_COORDINATE);
     if (!positionOk) {
@@ -477,16 +474,6 @@ export function buildSuite({ ceiling, rooms }) {
   }
   for (const room of built) {
     errors.push(...[...room.general, ...room.featureErrors.flat()].map((e) => prefix(room.label) + e));
-  }
-  // Rooms may share a wall but not floor space; the preview colours them too.
-  // Like the server, only rooms that are otherwise valid are compared (a room
-  // with a bad position is drawn at 0, 0, which would look like an overlap).
-  const overlaps = overlapProblems(built.map((room) => ({
-    name: room.label, outline: room.roomErrors.length ? null : room.view.outline,
-  })));
-  errors.push(...overlaps.map((problem) => problem.message));
-  for (const problem of overlaps) {
-    for (const i of problem.rooms) built[i].view.overlapping = true;
   }
 
   const complete = built.length > 0 && built.every((room) => room.room);
