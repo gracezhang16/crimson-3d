@@ -459,3 +459,14 @@ Product request from Grace: Rotate and Delete next to the furniture, so you don'
 - **Icons are inline SVG** (a turning arrow and a bin). No icon font or new files.
 - **Sits above the wall and room-name labels** (`z-index: 2`), so a label can never cover a button.
 - **Not on share pages**, which are read-only.
+
+## 2026-11-26 (Arranging rooms by dragging; hallways)
+
+Product choices from Grace: rooms are arranged by dragging them in the builder preview, snapping one wall apart. Suites can have hallways, as a new room kind.
+
+- **Contract change: a third room kind, `hallway`** (SPEC.md 4.2). `geometry.ROOM_KINDS` and `builder/state.js ROOM_KINDS` were changed together, with the same new message ("Room kind must be bedroom, common or hallway."). Existing suites are unaffected. Alternative: a common room named "Hallway", which needs no format change, but the facts page would call it a common room. Hallways are otherwise ordinary rooms: furniture may go in them, and walls and doorways work the same.
+- **Snapping keeps one wall's thickness between rooms**, because in the suite format a wall between rooms is the gap between their outlines (`roomMath.insideWalls` finds it). Snapping to touching rooms would make walls with no thickness. Edges also line up with a neighbour's, which is how real suites are usually laid out. Snapping uses bounding boxes, which is exact for rectangles and close enough for L-shapes; "Exact position" fixes anything else.
+- **The view holds still while dragging** (`drawSuite` takes a fixed box). Otherwise the preview re-fits the suite on every move and the room runs away from the pointer. Positions are kept starting at (0, 0) on every move, and the fixed view shifts by the same amount, so a room can be dragged above or left of the others without anything jumping.
+- **The builder now checks overlapping rooms itself** (`arrange.roomsOverlap`, mirroring `geometry._rooms_overlap`, with the shared fixture `tests/fixtures/overlap_cases.json`). Before, only the server did, on save. Rooms with other problems (such as a bad position) are left out of the check, as on the server.
+- **Room names in the preview** sit a third of the way down (clear of the selected room's side wall labels) and shrink to fit their room. Long thin rooms like hallways get their name turned sideways along their length.
+- **Fixed in passing**: the "Undo corner / Cancel drawing" buttons from A8 were always visible, because Bootstrap's `d-flex` overrides the `hidden` attribute. They now sit in an inner div, the same fix as the rename form on My layouts.

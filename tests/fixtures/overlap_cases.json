@@ -1,0 +1,13 @@
+{
+  "_comment": "Room overlap cases shared by tests/test_geometry.py (geometry._rooms_overlap, Python) and tests/arrange.test.mjs (builder/arrange.js roomsOverlap, JavaScript). Both must agree, so the builder's live 'rooms overlap' warning matches what the server says on save.",
+  "cases": [
+    {"name": "rooms sharing a wall", "a": [[0, 0], [120, 0], [120, 144], [0, 144]], "b": [[120, 0], [220, 0], [220, 144], [120, 144]], "overlap": false},
+    {"name": "a 5 in wall between rooms", "a": [[0, 0], [120, 0], [120, 144], [0, 144]], "b": [[125, 0], [225, 0], [225, 144], [125, 144]], "overlap": false},
+    {"name": "touching at one corner", "a": [[0, 0], [120, 0], [120, 144], [0, 144]], "b": [[120, 144], [180, 144], [180, 204], [120, 204]], "overlap": false},
+    {"name": "partly on top of each other", "a": [[0, 0], [120, 0], [120, 144], [0, 144]], "b": [[100, 20], [200, 20], [200, 120], [100, 120]], "overlap": true},
+    {"name": "one room inside another", "a": [[0, 0], [300, 0], [300, 300], [0, 300]], "b": [[50, 50], [110, 50], [110, 110], [50, 110]], "overlap": true},
+    {"name": "the same room twice", "a": [[0, 0], [120, 0], [120, 144], [0, 144]], "b": [[0, 0], [120, 0], [120, 144], [0, 144]], "overlap": true},
+    {"name": "a room tucked into an L's notch", "a": [[0, 0], [120, 0], [120, 60], [60, 60], [60, 144], [0, 144]], "b": [[60, 60], [140, 60], [140, 144], [60, 144]], "overlap": false},
+    {"name": "a room poking into an L's corner", "a": [[0, 0], [120, 0], [120, 60], [60, 60], [60, 144], [0, 144]], "b": [[50, 50], [130, 50], [130, 130], [50, 130]], "overlap": true}
+  ]
+}

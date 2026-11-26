@@ -77,11 +77,12 @@ def suite_facts(geometry):
     """The facts for a whole suite: each room's facts plus totals.
 
     `summary` is a short description for cards: the size of a one-room
-    suite, or "2 bedrooms + common room" for a bigger one.
+    suite, or "2 bedrooms + common room + hallway" for a bigger one.
     """
     rooms = [room_facts(room) for room in geometry["rooms"]]
     bedrooms = sum(1 for room in rooms if room["kind"] == "bedroom")
-    commons = len(rooms) - bedrooms
+    commons = sum(1 for room in rooms if room["kind"] == "common")
+    hallways = sum(1 for room in rooms if room["kind"] == "hallway")
     if len(rooms) == 1:
         only = rooms[0]
         summary = f"{feet_inches(only['width'])} × {feet_inches(only['length'])}"
@@ -91,6 +92,8 @@ def suite_facts(geometry):
         parts = [f"{bedrooms} bedroom{'s' if bedrooms != 1 else ''}"] if bedrooms else []
         if commons:
             parts.append("common room" if commons == 1 else f"{commons} common rooms")
+        if hallways:
+            parts.append("hallway" if hallways == 1 else f"{hallways} hallways")
         summary = " + ".join(parts)
     return {
         "rooms": rooms,

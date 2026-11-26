@@ -339,7 +339,7 @@ test("room names, kinds and positions are checked", () => {
   const { errors, geometry } = buildSuite({ ceiling: 102, rooms });
   assert.deepEqual(errors, [
     "Room 1: Give the room a name of 1 to 40 characters.",
-    "Common room: Room kind must be bedroom or common.",
+    "Common room: Room kind must be bedroom, common or hallway.",
     "Common room: Position must be whole numbers from 0 to 1200 in.",
   ]);
   assert.ok(geometry, "still drawn in the preview");

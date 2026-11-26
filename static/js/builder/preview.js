@@ -132,16 +132,21 @@ function svgElement(tag, attributes) {
  * @param {{name: string, outline: number[][] | null, openEnd: number[] | null,
  *   features: object[], featureErrors: string[][]}[]} rooms - from buildSuite()
  * @param {number} selected - index of the room being edited
+ * @param {{box?: object, guides?: object[]}} [options]
+ *   box: show exactly this area instead of fitting the rooms (kept still
+ *   while a room is dragged, so the view doesn't jump about); guides: dashed
+ *   snap lines from arrange.snapRoom()
+ * @returns {object | null} the area shown (a previewBox()), or null if nothing was drawn
  */
-export function drawSuite(svg, rooms, selected) {
+export function drawSuite(svg, rooms, selected, { box: fixedBox = null, guides = [] } = {}) {
   svg.replaceChildren();
   const drawable = rooms.filter((room) => room.outline);
   if (!drawable.length) {
     svg.setAttribute("viewBox", "0 0 100 75");
-    return;
+    return null;
   }
   const points = drawable.flatMap((room) => (room.openEnd ? [...room.outline, room.openEnd] : room.outline));
-  const box = previewBox(points);
+  const box = fixedBox ?? previewBox(points);
   svg.setAttribute("viewBox", `${box.x} ${box.y} ${box.width} ${box.height}`);
   // The selected room last, so it's drawn on top of its neighbours.
   const order = rooms.map((_, i) => i).filter((i) => i !== selected).concat(selected);
@@ -150,6 +155,13 @@ export function drawSuite(svg, rooms, selected) {
       svg.append(drawRoom(rooms[i], i, box, i === selected, rooms.length > 1));
     }
   }
+  for (const guide of guides) {
+    const [x1, y1, x2, y2] = guide.axis === "x"
+      ? [guide.at, guide.from, guide.at, guide.to]
+      : [guide.from, guide.at, guide.to, guide.at];
+    svg.append(svgElement("line", { x1, y1, x2, y2, class: "preview-snap-guide", "vector-effect": "non-scaling-stroke" }));
+  }
+  return box;
 }
 
 /**
@@ -178,7 +190,8 @@ export function drawPreview(svg, geometry, openEnd = null, featureErrors = []) {
  */
 function drawRoom(room, index, box, selected, named) {
   const { outline, openEnd } = room;
-  const group = svgElement("g", { class: `preview-room${selected ? " is-selected" : ""}`, "data-room": index });
+  const classes = ["preview-room", selected && "is-selected", room.overlapping && "is-overlapping"].filter(Boolean);
+  const group = svgElement("g", { class: classes.join(" "), "data-room": index });
   const points = pointsText(outline);
 
   if (openEnd) {
@@ -225,26 +238,40 @@ function drawRoom(room, index, box, selected, named) {
     drawWallLabels(group, wallSegments(outline, openEnd), box.margin);
   }
   if (named) {
-    const [cx, cy] = roomCenter(outline);
-    const name = svgElement("text", {
-      x: cx, y: cy, "font-size": box.margin * 0.24, class: "preview-room-name",
-      "text-anchor": "middle", "dominant-baseline": "middle",
-    });
-    name.textContent = room.name;
-    group.append(name);
+    group.append(drawRoomName(room.name, outline, box.margin * 0.24));
   }
   return group;
 }
 
 /**
- * The middle of a room's bounding box, for its name.
+ * A room's name, sized to fit inside it. Usually across the room, a third of
+ * the way down (the selected room's side wall labels sit at mid-height and
+ * spill over its neighbours). In a long thin room such as a hallway, where it
+ * would be tiny, it runs along the room instead, turned sideways.
+ *
+ * @param {string} text
  * @param {number[][]} outline
- * @returns {number[]}
+ * @param {number} maxSize - the usual font size, inches
+ * @returns {SVGTextElement}
  */
-function roomCenter(outline) {
+function drawRoomName(text, outline, maxSize) {
   const xs = outline.map(([x]) => x);
   const ys = outline.map(([, y]) => y);
-  return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+  const [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  // Capital letters with wide spacing take about 0.8 of the font size each.
+  const fit = (length) => Math.min(maxSize, (length * 0.9) / (0.8 * Math.max(1, text.length)));
+  const across = fit(maxX - minX);
+  const along = fit(maxY - minY);
+  const sideways = along > across * 1.5;
+  const x = (minX + maxX) / 2;
+  const y = sideways ? (minY + maxY) / 2 : minY + (maxY - minY) / 3;
+  const name = svgElement("text", {
+    x, y, "font-size": sideways ? along : across, class: "preview-room-name",
+    "text-anchor": "middle", "dominant-baseline": "middle",
+    ...(sideways ? { transform: `rotate(-90 ${x} ${y})` } : {}),
+  });
+  name.textContent = text;
+  return name;
 }
 
 /**

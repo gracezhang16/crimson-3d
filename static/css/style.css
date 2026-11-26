@@ -541,6 +541,36 @@ kbd {
     text-transform: uppercase;
 }
 
+/* Arranging rooms by dragging them in the preview (builder/main.js). */
+.builder-preview svg .preview-room {
+    cursor: grab;
+}
+
+.builder-preview svg.is-dragging,
+.builder-preview svg.is-dragging .preview-room {
+    cursor: grabbing;
+}
+
+/* Dashed lines showing what a dragged room snapped to. */
+.preview-snap-guide {
+    stroke: var(--crimson-bright);
+    stroke-width: 1.5;
+    stroke-dasharray: 5 4;
+}
+
+/* Rooms that overlap another (not allowed): red floor and walls. */
+.preview-room.is-overlapping .preview-floor {
+    fill: rgb(220 53 69 / 18%);
+}
+
+.preview-room.is-overlapping .preview-walls {
+    stroke: #dc3545;
+}
+
+.position-details > summary {
+    cursor: pointer;
+}
+
 /* Clicking a wall of the room being edited jumps to its length box. The
    line is invisible but wide, and pointer-events: stroke makes it clickable. */
 .preview-wall-hit {

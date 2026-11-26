@@ -13,10 +13,15 @@
  * A8: "Draw it on the preview" hands the preview to draw.js until the shape
  * is closed or drawing is cancelled; the drawn outline then fills the wall
  * rows, marked "drawn" until a measured length is typed (outline.closeWalk).
+ *
+ * Rooms are arranged by dragging them in the preview (2026-11-26): they snap
+ * beside each other one wall apart (arrange.snapRoom), and the suite is kept
+ * starting at (0, 0) (arrange.normalizePositions).
  */
 
 import { formatFeetInches } from "../shared/units.js";
 import { signedArea, wallLetter } from "../shared/geometry.js";
+import { bounds, normalizePositions, snapRoom } from "./arrange.js";
 import { startDrawing } from "./draw.js";
 import { closeWalk, wallsFromOutline } from "./outline.js";
 import { drawSuite } from "./preview.js";
@@ -58,6 +63,9 @@ let selected = 0;                     // the room shown in the editor
 let built = null;                     // the latest buildSuite() result
 let drawing = null;                   // while drawing: draw.js's controls (undo, cancel)
 let walkBefore = null;                // wall lengths when a length box got focus (keepWalkClosed)
+let roomDrag = null;                  // while a room is being dragged in the preview (see startRoomDrag)
+let lastBox = null;                   // the area the preview showed last time (drawSuite's result)
+let ignoreNextClick = false;          // the click that ends a drag isn't a "select this room" click
 
 /**
  * Look up a form field by its name attribute.
@@ -318,7 +326,13 @@ function renderTabs() {
   add.dataset.action = "add-room";
   add.textContent = "+ Add room";
   add.disabled = rooms.length >= MAX_ROOMS;
-  roomTabs.replaceChildren(...buttons, add);
+  const hallway = document.createElement("button");
+  hallway.type = "button";
+  hallway.className = "btn btn-sm btn-outline-secondary";
+  hallway.dataset.action = "add-hallway";
+  hallway.textContent = "+ Add hallway";
+  hallway.disabled = rooms.length >= MAX_ROOMS;
+  roomTabs.replaceChildren(...buttons, add, hallway);
 
   form.querySelector('[data-action="remove-room"]').disabled = rooms.length === 1;
   placeNextTo.hidden = rooms.length === 1;
@@ -340,15 +354,27 @@ function selectRoom(i) {
   update();
 }
 
-/** Add a room east of the current one: a common room if there's none yet, else a bedroom. */
-function addRoom() {
+/**
+ * Add a room east of the current one: a common room if there's none yet,
+ * else a bedroom; or, with `hallway`, a long thin hallway.
+ *
+ * @param {boolean} [hallway]
+ */
+function addRoom(hallway = false) {
   rooms[selected] = readEditor();
   const anchor = built?.rooms[selected]?.outline;
-  const position = anchor ? positionNextTo(anchor, "east", DEFAULT_GAP) : { x: 0, y: 0 };
+  const position = anchor ? positionNextTo(anchor, "east", wallGap()) : { x: 0, y: 0 };
   const hasCommon = rooms.some((room) => room.kind === "common");
   const bedrooms = rooms.filter((room) => room.kind === "bedroom").length;
-  const name = hasCommon ? `Bedroom ${String.fromCharCode(65 + bedrooms)}` : "Common room";
-  rooms.push(newRoom(name, hasCommon ? "bedroom" : "common", position));
+  const hallways = rooms.filter((room) => room.kind === "hallway").length;
+  let name;
+  let kind;
+  if (hallway) {
+    [name, kind] = [hallways ? `Hallway ${hallways + 1}` : "Hallway", "hallway"];
+  } else {
+    [name, kind] = hasCommon ? [`Bedroom ${String.fromCharCode(65 + bedrooms)}`, "bedroom"] : ["Common room", "common"];
+  }
+  rooms.push(newRoom(name, kind, position));
   selected = rooms.length - 1;
   writeEditor(rooms[selected]);
   renderTabs();
@@ -375,7 +401,7 @@ function placeNextToRoom() {
   if (!other) {
     return; // that room has no shape yet
   }
-  const gap = parseInches(document.querySelector("#place-gap").value);
+  const gap = wallGap();
   const side = document.querySelector("#place-side").value;
   const { x, y } = positionNextTo(other, side, Number.isNaN(gap) ? DEFAULT_GAP : gap);
   field("room_x").value = x;
@@ -420,6 +446,12 @@ function showStatus(geometry, errors) {
   status.textContent = `✓ ${geometry.rooms.length} rooms · ${area.toFixed(1)} sq ft in all`;
 }
 
+/** @returns {number} the wall thickness between rooms (the box by the preview), default 5 in */
+function wallGap() {
+  const gap = parseInches(document.querySelector("#wall-gap").value);
+  return Number.isNaN(gap) ? DEFAULT_GAP : gap;
+}
+
 /** Rebuild the suite from every room and redraw everything. */
 function update() {
   rooms[selected] = readEditor();
@@ -433,7 +465,9 @@ function update() {
   if (tab) tab.textContent = rooms[selected].name.trim() || `Room ${selected + 1}`;
   showStatus(built.geometry, built.errors);
   if (!drawing) {
-    drawSuite(svg, built.rooms, selected); // while drawing, draw.js owns the preview
+    // While drawing, draw.js owns the preview. While dragging a room, the
+    // view stays still (fixed box) and shows the snap guides.
+    lastBox = drawSuite(svg, built.rooms, selected, roomDrag?.moved ? roomDrag.view : {});
   }
   // Only a complete, valid suite goes into the hidden field the server reads.
   field("geometry").value = built.errors.length || !built.geometry ? "" : JSON.stringify(built.geometry);
@@ -454,6 +488,122 @@ function setShape(shape) {
     rectangleWalls(width, length).forEach((wall) => addWallRow(wall.direction, wall.length));
   }
   update();
+}
+
+// ---------------------------------------------------------------------------
+// Arranging rooms by dragging them in the preview
+// ---------------------------------------------------------------------------
+
+/**
+ * Where a pointer event is, in plan inches. The preview <svg> shows inches
+ * through its viewBox; getScreenCTM() is the browser's inches-to-pixels
+ * transform, and its inverse turns the pointer's pixels back into inches.
+ */
+function planPoint(event) {
+  const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(svg.getScreenCTM().inverse());
+  return [point.x, point.y];
+}
+
+/** Every room's position as numbers (from the typed values, 0 if unreadable). */
+function positions() {
+  rooms[selected] = readEditor();
+  return rooms.map((room) => ({ x: parseInches(room.x) || 0, y: parseInches(room.y) || 0 }));
+}
+
+/** Write positions back to every room (and the editor, for the selected one). */
+function setPositions(list) {
+  list.forEach((position, i) => {
+    rooms[i].x = String(position.x);
+    rooms[i].y = String(position.y);
+  });
+  field("room_x").value = rooms[selected].x;
+  field("room_y").value = rooms[selected].y;
+}
+
+/**
+ * Pointer down on a room in the preview: get ready to drag it. Nothing moves
+ * until the pointer does, so a plain click still just selects the room.
+ */
+function startRoomDrag(event) {
+  const target = event.target.closest("[data-room]");
+  if (drawing || event.button !== 0 || !target || event.target.closest("[data-wall]") || !built) {
+    return;
+  }
+  const index = Number(target.dataset.room);
+  if (!built.rooms[index]?.outline || built.rooms[index].openEnd) {
+    return; // a room without a finished shape can't be dragged
+  }
+  roomDrag = {
+    index,
+    pointerId: event.pointerId,
+    screen: [event.clientX, event.clientY],
+    start: planPoint(event),
+    startPositions: positions(),
+    startBox: lastBox,
+    // Every room's box at the start, in the same (start) coordinates.
+    boxes: built.rooms.map((room) => (room.outline ? bounds(room.outline) : null)),
+    shift: { x: 0, y: 0 },  // how far normalizing has moved everything so far
+    moved: false,
+    view: {},
+  };
+  svg.setPointerCapture(event.pointerId); // keep getting moves even outside the preview
+}
+
+/** Pointer move while dragging a room: move it, snapped, and redraw. */
+function moveRoomDrag(event) {
+  if (!roomDrag || event.pointerId !== roomDrag.pointerId) {
+    return;
+  }
+  const drag = roomDrag;
+  if (!drag.moved) {
+    if (Math.hypot(event.clientX - drag.screen[0], event.clientY - drag.screen[1]) < 4) {
+      return; // not a drag yet: a little wobble during a click
+    }
+    drag.moved = true;
+    if (drag.index !== selected) {
+      selectRoom(drag.index); // edit the room being dragged
+    }
+    svg.classList.add("is-dragging");
+  }
+  // The pointer in start coordinates: undo the shift normalizing has made.
+  const [px, py] = planPoint(event);
+  const dx = Math.round(px + drag.shift.x - drag.start[0]);
+  const dy = Math.round(py + drag.shift.y - drag.start[1]);
+  const from = drag.boxes[drag.index];
+  const box = { minX: from.minX + dx, minY: from.minY + dy, maxX: from.maxX + dx, maxY: from.maxY + dy };
+  const others = drag.boxes.filter((other, i) => other && i !== drag.index);
+  // Alt (Option on a Mac) places the room freely, without snapping.
+  const snapped = event.altKey ? { dx: 0, dy: 0, guides: [] } : snapRoom(box, others, wallGap());
+
+  const list = drag.startPositions.map((p) => ({ ...p }));
+  list[drag.index] = { x: list[drag.index].x + dx + snapped.dx, y: list[drag.index].y + dy + snapped.dy };
+  // Keep the suite starting at (0, 0). If that moves everything, move the
+  // view and the guides by the same amount, so nothing jumps on screen.
+  const normal = normalizePositions(list);
+  drag.shift = { x: normal[0].x - list[0].x, y: normal[0].y - list[0].y };
+  setPositions(normal);
+  const { x: sx, y: sy } = drag.shift;
+  drag.view = {
+    box: drag.startBox && { ...drag.startBox, x: drag.startBox.x + sx, y: drag.startBox.y + sy },
+    guides: snapped.guides.map((g) => (g.axis === "x"
+      ? { ...g, at: g.at + sx, from: g.from + sy, to: g.to + sy }
+      : { ...g, at: g.at + sy, from: g.from + sx, to: g.to + sx })),
+  };
+  update();
+}
+
+/** Pointer up: drop the room, and let the preview fit the suite again. */
+function endRoomDrag(event) {
+  if (!roomDrag || event.pointerId !== roomDrag.pointerId) {
+    return;
+  }
+  const { moved } = roomDrag;
+  roomDrag = null;
+  svg.classList.remove("is-dragging");
+  if (moved) {
+    ignoreNextClick = true;
+    update();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -557,6 +707,9 @@ form.addEventListener("click", (event) => {
     case "add-room":
       addRoom();
       break;
+    case "add-hallway":
+      addRoom(true);
+      break;
     case "remove-room":
       removeRoom();
       break;
@@ -586,7 +739,15 @@ form.addEventListener("click", (event) => {
 });
 // Clicking a wall of the room being edited jumps to its length; clicking
 // another room edits that room.
+svg.addEventListener("pointerdown", startRoomDrag);
+svg.addEventListener("pointermove", moveRoomDrag);
+svg.addEventListener("pointerup", endRoomDrag);
+svg.addEventListener("pointercancel", endRoomDrag);
 svg.addEventListener("click", (event) => {
+  if (ignoreNextClick) {
+    ignoreNextClick = false; // this click ended a drag
+    return;
+  }
   const wall = event.target.closest("[data-wall]");
   if (wall) {
     focusWall(Number(wall.dataset.wall));
