@@ -32,7 +32,7 @@ const MAX_FEATURES = 40;
 const SINGLE_ROOM_NAME = "Main room"; // buildGeometry()'s one room
 const MAX_ROOMS = 8;
 const MAX_ROOM_NAME = 40;
-export const ROOM_KINDS = ["bedroom", "common"];
+export const ROOM_KINDS = ["bedroom", "common", "hallway"]; // geometry.py ROOM_KINDS (hallway added 2026-11-26)
 const EPSILON = 1e-9; // as in geometry.py: diagonal wall lengths aren't whole numbers
 
 export const FEATURE_KINDS = ["door", "window", "closet", "radiator", "outlet"];
@@ -350,8 +350,10 @@ function validateHeights(feature, name, ceiling) {
  * @returns {object}
  */
 export function newRoom(name, kind = "bedroom", position = { x: 0, y: 0 }) {
+  // A hallway starts long and thin (4 × 15 ft); other rooms 10 × 12 ft.
+  const [width, length] = kind === "hallway" ? ["48", "180"] : ["120", "144"];
   return {
-    name, kind, shape: "rectangle", width: "120", length: "144",
+    name, kind, shape: "rectangle", width, length,
     x: String(position.x), y: String(position.y), walls: [], features: [],
   };
 }
@@ -434,7 +436,7 @@ export function buildSuite({ ceiling, rooms }) {
       roomErrors.push(`Give the room a name of 1 to ${MAX_ROOM_NAME} characters.`);
     }
     if (!ROOM_KINDS.includes(room.kind)) {
-      roomErrors.push("Room kind must be bedroom or common.");
+      roomErrors.push("Room kind must be bedroom, common or hallway.");
     }
     const positionOk = isWholeBetween(room.x, 0, MAX_COORDINATE) && isWholeBetween(room.y, 0, MAX_COORDINATE);
     if (!positionOk) {

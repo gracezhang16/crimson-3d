@@ -225,26 +225,40 @@ function drawRoom(room, index, box, selected, named) {
     drawWallLabels(group, wallSegments(outline, openEnd), box.margin);
   }
   if (named) {
-    const [cx, cy] = roomCenter(outline);
-    const name = svgElement("text", {
-      x: cx, y: cy, "font-size": box.margin * 0.24, class: "preview-room-name",
-      "text-anchor": "middle", "dominant-baseline": "middle",
-    });
-    name.textContent = room.name;
-    group.append(name);
+    group.append(drawRoomName(room.name, outline, box.margin * 0.24));
   }
   return group;
 }
 
 /**
- * The middle of a room's bounding box, for its name.
+ * A room's name, sized to fit inside it. Usually across the room, a third of
+ * the way down (the selected room's side wall labels sit at mid-height and
+ * spill over its neighbours). In a long thin room such as a hallway, where it
+ * would be tiny, it runs along the room instead, turned sideways.
+ *
+ * @param {string} text
  * @param {number[][]} outline
- * @returns {number[]}
+ * @param {number} maxSize - the usual font size, inches
+ * @returns {SVGTextElement}
  */
-function roomCenter(outline) {
+function drawRoomName(text, outline, maxSize) {
   const xs = outline.map(([x]) => x);
   const ys = outline.map(([, y]) => y);
-  return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+  const [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  // Capital letters with wide spacing take about 0.8 of the font size each.
+  const fit = (length) => Math.min(maxSize, (length * 0.9) / (0.8 * Math.max(1, text.length)));
+  const across = fit(maxX - minX);
+  const along = fit(maxY - minY);
+  const sideways = along > across * 1.5;
+  const x = (minX + maxX) / 2;
+  const y = sideways ? (minY + maxY) / 2 : minY + (maxY - minY) / 3;
+  const name = svgElement("text", {
+    x, y, "font-size": sideways ? along : across, class: "preview-room-name",
+    "text-anchor": "middle", "dominant-baseline": "middle",
+    ...(sideways ? { transform: `rotate(-90 ${x} ${y})` } : {}),
+  });
+  name.textContent = text;
+  return name;
 }
 
 /**

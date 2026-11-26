@@ -364,7 +364,7 @@ def test_room_names(name):
 
 
 def test_room_kind():
-    assert validate_suite(suite_of({**BEDROOM, "kind": "kitchen"})) == ["Bedroom A: Room kind must be bedroom or common."]
+    assert validate_suite(suite_of({**BEDROOM, "kind": "kitchen"})) == ["Bedroom A: Room kind must be bedroom, common or hallway."]
 
 
 def test_messages_name_the_room():
@@ -517,3 +517,8 @@ def test_shared_outline_cases(case):
     # The crossing check itself, as in the JavaScript test (validate_room
     # checks area first, so a figure of eight there reports "no area").
     assert geometry._find_crossing(case["outline"]) == case["expected"]
+
+
+def test_hallway_is_a_room_kind():
+    hallway = {"name": "Hallway", "kind": "hallway", "outline": [[0, 0], [48, 0], [48, 180], [0, 180]], "features": []}
+    assert validate_room(hallway, 102) == []

@@ -42,7 +42,7 @@
                             <tr>
                                 <td>
                                     {{ room.name }}
-                                    {% if room.kind == "common" %}<span class="badge text-bg-light border">common</span>{% endif %}
+                                    {% if room.kind in ("common", "hallway") %}<span class="badge text-bg-light border">{{ room.kind }}</span>{% endif %}
                                 </td>
                                 <td>
                                     {{ room.width | feet_inches }} × {{ room.length | feet_inches }}

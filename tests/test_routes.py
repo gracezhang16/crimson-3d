@@ -557,3 +557,14 @@ def test_my_layouts_offers_share_and_shopping_list(client):
     page = client.get("/layouts").get_data(as_text=True)
     assert f'href="/layouts/{layout_id}/shopping-list"' in page
     assert ">Stop sharing</button>" in page and "/share/test-token-123" in page
+
+
+def test_suite_summary_counts_hallways_separately():
+    from pages import suite_facts
+    rect = lambda x, y, w, h: [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
+    geometry = {"version": 2, "units": "in", "ceiling": 102, "rooms": [
+        {"name": "Bedroom A", "kind": "bedroom", "outline": rect(0, 0, 120, 144), "features": []},
+        {"name": "Common room", "kind": "common", "outline": rect(125, 0, 180, 144), "features": []},
+        {"name": "Hallway", "kind": "hallway", "outline": rect(0, 149, 48, 180), "features": []},
+    ]}
+    assert suite_facts(geometry)["summary"] == "1 bedroom + common room + hallway"

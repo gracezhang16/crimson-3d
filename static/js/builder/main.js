@@ -318,7 +318,13 @@ function renderTabs() {
   add.dataset.action = "add-room";
   add.textContent = "+ Add room";
   add.disabled = rooms.length >= MAX_ROOMS;
-  roomTabs.replaceChildren(...buttons, add);
+  const hallway = document.createElement("button");
+  hallway.type = "button";
+  hallway.className = "btn btn-sm btn-outline-secondary";
+  hallway.dataset.action = "add-hallway";
+  hallway.textContent = "+ Add hallway";
+  hallway.disabled = rooms.length >= MAX_ROOMS;
+  roomTabs.replaceChildren(...buttons, add, hallway);
 
   form.querySelector('[data-action="remove-room"]').disabled = rooms.length === 1;
   placeNextTo.hidden = rooms.length === 1;
@@ -340,15 +346,27 @@ function selectRoom(i) {
   update();
 }
 
-/** Add a room east of the current one: a common room if there's none yet, else a bedroom. */
-function addRoom() {
+/**
+ * Add a room east of the current one: a common room if there's none yet,
+ * else a bedroom; or, with `hallway`, a long thin hallway.
+ *
+ * @param {boolean} [hallway]
+ */
+function addRoom(hallway = false) {
   rooms[selected] = readEditor();
   const anchor = built?.rooms[selected]?.outline;
   const position = anchor ? positionNextTo(anchor, "east", DEFAULT_GAP) : { x: 0, y: 0 };
   const hasCommon = rooms.some((room) => room.kind === "common");
   const bedrooms = rooms.filter((room) => room.kind === "bedroom").length;
-  const name = hasCommon ? `Bedroom ${String.fromCharCode(65 + bedrooms)}` : "Common room";
-  rooms.push(newRoom(name, hasCommon ? "bedroom" : "common", position));
+  const hallways = rooms.filter((room) => room.kind === "hallway").length;
+  let name;
+  let kind;
+  if (hallway) {
+    [name, kind] = [hallways ? `Hallway ${hallways + 1}` : "Hallway", "hallway"];
+  } else {
+    [name, kind] = hasCommon ? [`Bedroom ${String.fromCharCode(65 + bedrooms)}`, "bedroom"] : ["Common room", "common"];
+  }
+  rooms.push(newRoom(name, kind, position));
   selected = rooms.length - 1;
   writeEditor(rooms[selected]);
   renderTabs();
@@ -556,6 +574,9 @@ form.addEventListener("click", (event) => {
       break;
     case "add-room":
       addRoom();
+      break;
+    case "add-hallway":
+      addRoom(true);
       break;
     case "remove-room":
       removeRoom();

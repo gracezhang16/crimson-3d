@@ -153,7 +153,7 @@ The numbers above are invented examples.
 | `ceiling` | int | 72 to 240, shared by every room |
 | `rooms` | array | 1 to 8 rooms; rooms must not overlap (they may share a wall) |
 | `room.name` | string | 1 to 40 characters, e.g. "Bedroom A" |
-| `room.kind` | string | `bedroom` or `common` |
+| `room.kind` | string | `bedroom`, `common` or `hallway` *(hallway added 2026-11-26; `geometry.ROOM_KINDS` and `builder/state.js ROOM_KINDS` changed together)* |
 | `room.outline` | array of `[x, y]` int pairs | 3 to 12 corners; each coordinate 0 to 1200; non-zero area; no two consecutive corners equal; edges must not cross each other |
 | `room.features` | array | 0 to 40 items per room |
 | `feature.kind` | string | One of `door`, `window`, `closet`, `radiator`, `outlet` |
@@ -582,7 +582,9 @@ A visual reference for the intended look and behaviour is `docs/demo-reference.h
 
 ### 9.0 Suites *(added 2026-11-24)*
 
-The builder edits one room at a time: room tabs (and clicking a room in the preview) choose the room shown in the editor, with its name, kind (bedroom or common room), shape, position (its north-west corner, in inches from the suite's west and north sides) and features. "+ Add room" and "Place east/south of [room] with a [5] in wall" position rooms automatically. The ceiling is set once for the whole suite. The preview draws the whole suite, highlighting the room being edited. Custom (non-rectangular) rooms are entered by walking their walls (direction and length each), which brought part of 9.2 into the Good tier.
+The builder edits one room at a time: room tabs (and clicking a room in the preview) choose the room shown in the editor, with its name, kind (bedroom, common room or hallway), shape, position (its north-west corner, in inches from the suite's west and north sides) and features. "+ Add room" and "Place east/south of [room] with a [5] in wall" position rooms automatically. The ceiling is set once for the whole suite. The preview draws the whole suite, highlighting the room being edited. Custom (non-rectangular) rooms are entered by walking their walls (direction and length each), which brought part of 9.2 into the Good tier.
+
+*(Added 2026-11-26.)* "+ Add hallway" adds a 4 × 15 ft room of kind `hallway`, placed like any other room. Hallways are ordinary rooms in the planner (furniture may go in them). The facts summary lists them separately ("1 bedroom + common room + hallway"). In the preview, room names shrink to fit their room, and long thin rooms get their name turned sideways.
 
 ### 9.1 Good tier: rectangular rooms
 

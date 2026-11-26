@@ -339,7 +339,7 @@ test("room names, kinds and positions are checked", () => {
   const { errors, geometry } = buildSuite({ ceiling: 102, rooms });
   assert.deepEqual(errors, [
     "Room 1: Give the room a name of 1 to 40 characters.",
-    "Common room: Room kind must be bedroom or common.",
+    "Common room: Room kind must be bedroom, common or hallway.",
     "Common room: Position must be whole numbers from 0 to 1200 in.",
   ]);
   assert.ok(geometry, "still drawn in the preview");
@@ -374,4 +374,13 @@ test("the sample suite survives a round trip through the form", () => {
   const { geometry, errors } = buildSuite({ ceiling: Number(form.ceiling), rooms: form.rooms.map(parseRoom) });
   assert.deepEqual(errors, []);
   assert.deepEqual(geometry, sample);
+});
+
+test("a new hallway starts long and thin, and builds as a hallway", () => {
+  const hallway = newRoom("Hallway", "hallway", { x: 0, y: 149 });
+  assert.equal(hallway.width, "48");
+  assert.equal(hallway.length, "180");
+  const { geometry, errors } = buildSuite({ ceiling: 102, rooms: [parseRoom(newRoom("Bedroom A")), parseRoom(hallway)] });
+  assert.deepEqual(errors, []);
+  assert.equal(geometry.rooms[1].kind, "hallway");
 });
