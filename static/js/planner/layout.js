@@ -20,7 +20,9 @@
 import * as THREE from "three";
 import { popIn, shrinkAway } from "./animate.js";
 import { makeFurniture, setIssueTint, setLabelVisible } from "./furniture.js";
-import { evaluate, findFreeSpot, footprint, footprintBox, itemDimensions, snap, zones } from "./rules.js";
+import {
+  blockMove, evaluate, findFreeSpot, firstCollision, footprint, footprintBox, itemDimensions, snap, zones,
+} from "./rules.js";
 
 const SELECTION_COLOR = 0xa51c30;  // crimson (SPEC.md 8.4)
 const SELECTION_MARGIN = 1.5;      // inches between the item and its outline
@@ -97,6 +99,16 @@ export function createLayout(geometry, catalogById, scene, requestRender, animat
   // count as non-flat (height 2), so rugs, which never collide (rule 3), may.
   const zoneBlockers = zones(geometry).map((zone) => ({ box: zone.box, height: 2 }));
 
+  /**
+   * Every item except `entry`, as {box, item}: what blockMove() and
+   * firstCollision() check against, so furniture can't be pushed into furniture.
+   */
+  function othersThan(entry) {
+    return entries
+      .filter((other) => other !== entry)
+      .map((other) => ({ box: footprintBox(other.placement, other.item), item: other.item }));
+  }
+
   /** Everything a newly added item should keep clear of, for findFreeSpot(). */
   function blockers() {
     return entries
@@ -169,7 +181,9 @@ export function createLayout(geometry, catalogById, scene, requestRender, animat
      * @param {{flush?: boolean}} [options] - false for arrow keys (see rules.snap)
      */
     moveTo(entry, x, y, options = {}) {
-      const spot = snap({ x, y }, entry.item, entry.placement.rotation, outlines, options);
+      const wanted = snap({ x, y }, entry.item, entry.placement.rotation, outlines, options);
+      // Other furniture is solid: stop against it and slide along it.
+      const spot = blockMove(entry.placement, wanted, entry.item, entry.placement.rotation, othersThan(entry));
       if (spot.x === entry.placement.x && spot.y === entry.placement.y) {
         return; // nothing moved; skip the redraw
       }
@@ -181,14 +195,31 @@ export function createLayout(geometry, catalogById, scene, requestRender, animat
 
     /**
      * Turn an item 90° clockwise, then snap it back inside if it now sticks out.
+     * If the turned item would run into other furniture it stays as it was,
+     * and listeners get a `note` saying why (the panel shows it).
+     *
      * @param {object} entry
+     * @returns {boolean} true if it turned
      */
     rotate(entry) {
       const placement = entry.placement;
-      placement.rotation = (placement.rotation + 90) % 360;
-      Object.assign(placement, snap(placement, entry.item, placement.rotation, outlines, { flush: false }));
+      const rotation = (placement.rotation + 90) % 360;
+      const spot = snap(placement, entry.item, rotation, outlines, { flush: false });
+      const others = othersThan(entry);
+      const before = footprintBox(placement, entry.item);
+      // Only count items it doesn't overlap already, as in blockMove().
+      const clear = others.filter((other) => firstCollision(before, entry.item, [other]) === null);
+      const hit = firstCollision(footprintBox({ ...spot, rotation }, entry.item), entry.item, clear);
+      if (hit) {
+        const note = `No room to turn it here: it would hit the ${hit.name.charAt(0).toLowerCase()}${hit.name.slice(1)}.`;
+        listeners.forEach((listener) => listener({ content: false, note }));
+        return false;
+      }
+      placement.rotation = rotation;
+      Object.assign(placement, spot);
       rebuild(entry);
       changed(true);
+      return true;
     },
 
     /** @param {object} entry */

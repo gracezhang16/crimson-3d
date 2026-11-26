@@ -111,10 +111,16 @@ export function createPanel(layout, catalog) {
     if (entry) layout.remove(entry);
   });
 
-  /** Redraw the parts that depend on the layout. */
-  function refresh() {
+  /**
+   * Redraw the parts that depend on the layout.
+   * @param {{note?: string}} [change] - a note from the layout, e.g. why a turn was refused
+   */
+  function refresh(change = {}) {
     const selected = layout.selected();
     selection.hidden = !selected;
+    const note = document.querySelector("#selection-note");
+    note.hidden = !change.note;
+    note.textContent = change.note ?? "";
     if (selected) {
       const { name, width, depth, height } = selected.item;
       document.querySelector("#selection-name").textContent = name;
@@ -139,7 +145,7 @@ export function createPanel(layout, catalog) {
     updateFitStatus(entries);
   }
 
-  layout.onChange(() => refresh());
+  layout.onChange((change) => refresh(change));
   refresh();
 }
 

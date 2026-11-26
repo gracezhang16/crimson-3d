@@ -541,7 +541,11 @@ A suite's rooms are drawn together in one plan. Every wall, between rooms or out
 
 - **Pick:** `Raycaster` against item groups on pointer down.
 - **Drag:** on pointer down over an item, disable `OrbitControls`, record the offset between the hit point and the item centre, and on pointer move intersect the pointer ray with the horizontal plane at the hit height. Move the item to that point minus the offset, then apply `rules.snap`. Re-enable controls on pointer up.
-- **Rotate:** button and the R key, 90° clockwise.
+- *(Added 2026-11-26.)* **Furniture is solid:** a dragged or nudged item stops against other furniture and slides along it (`rules.blockMove`).
+  - Rules 3 and 4 still hold: rugs never block, and anything low enough fits under a bed.
+  - Anything the item already overlaps (an old layout, or no free spot when it was added) doesn't block, so it can be dragged free.
+  - Overlaps are still flagged by `rules.evaluate`, for those cases.
+- **Rotate:** button and the R key, 90° clockwise. If the turned item would hit other furniture, it doesn't turn, and the panel says what it would hit.
 - **Delete:** button and Delete/Backspace.
 - **Keyboard move:** arrow keys move the selected item 1 in, Shift + arrow 6 in.
 - **Escape** clears the selection. Clicking empty floor without dragging clears it too.

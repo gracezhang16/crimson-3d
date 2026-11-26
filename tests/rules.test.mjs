@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 
 import {
+  blockMove, firstCollision,
   checkCustomItem, evaluate, findFreeSpot, footprint, footprintBox, insideAnyRoom, insideRoom, itemDimensions,
   mayOverlap, overlaps, pointInPolygon, shoppingList, snap, zones,
 } from "../static/js/planner/rules.js";
@@ -394,4 +395,55 @@ test("shoppingList lists things to buy and custom items, grouped, not Harvard fu
   ]);
   assert.deepEqual(list.map((i) => [i.name, i.count, i.custom]),
     [["Mini fridge", 1, false], ["Storage bin", 2, false], ["Bean bag chair", 1, true]]);
+});
+
+
+// --- Solid furniture (2026-11-26) -------------------------------------------------
+
+const SOLID_DESK = { name: "Desk", width: 42, depth: 24, height: 30, clearance: 0 };
+const SOLID_BED = { name: "Bed, twin XL", width: 40, depth: 84, height: 36, clearance: 14 };
+const SOLID_BIN = { name: "Storage bin", width: 24, depth: 16, height: 13, clearance: 0 };
+const SOLID_RUG = { name: "Rug", width: 60, depth: 96, height: 1, clearance: 0 };
+const placed = (item, x, y, rotation = 0) => ({ item, box: footprintBox({ x, y, rotation }, item) });
+
+test("blockMove stops a dragged item against another one", () => {
+  // Desk (42 wide) at x 30 dragged east into a bed whose west edge is at x 80.
+  const bed = placed(SOLID_BED, 100, 60);
+  assert.deepEqual(blockMove({ x: 30, y: 60 }, { x: 90, y: 60 }, SOLID_DESK, 0, [bed]), { x: 59, y: 60 });
+  // ...and the same going west into it from the other side (bed's east edge at 120).
+  assert.deepEqual(blockMove({ x: 170, y: 60 }, { x: 100, y: 60 }, SOLID_DESK, 0, [bed]), { x: 141, y: 60 });
+});
+
+test("blockMove slides along an item instead of stopping dead", () => {
+  // Dragged diagonally (east and south) into the bed: east is blocked, south isn't.
+  const bed = placed(SOLID_BED, 100, 60);
+  assert.deepEqual(blockMove({ x: 30, y: 60 }, { x: 90, y: 80 }, SOLID_DESK, 0, [bed]), { x: 59, y: 80 });
+});
+
+test("blockMove ignores items it can share space with, and items it already overlaps", () => {
+  const bed = placed(SOLID_BED, 100, 60);
+  // A storage bin (13 in) fits under the bed (14 in clear): rule 4.
+  assert.deepEqual(blockMove({ x: 30, y: 60 }, { x: 100, y: 60 }, SOLID_BIN, 0, [bed]), { x: 100, y: 60 });
+  // Nothing collides with a rug: rule 3.
+  assert.deepEqual(blockMove({ x: 30, y: 60 }, { x: 100, y: 60 }, SOLID_DESK, 0, [placed(SOLID_RUG, 100, 60)]), { x: 100, y: 60 });
+  // Already overlapping the bed (e.g. an old layout): free to move, so it can be dragged out.
+  assert.deepEqual(blockMove({ x: 90, y: 60 }, { x: 20, y: 60 }, SOLID_DESK, 0, [bed]), { x: 20, y: 60 });
+});
+
+test("blockMove only stops at things actually in the way", () => {
+  // The bed is further south, beside the desk's path rather than across it.
+  const bed = placed(SOLID_BED, 100, 200);
+  assert.deepEqual(blockMove({ x: 30, y: 60 }, { x: 150, y: 60 }, SOLID_DESK, 0, [bed]), { x: 150, y: 60 });
+});
+
+test("blockMove can't jump through a thin item, however far the pointer goes", () => {
+  const lamp = placed({ name: "Floor lamp", width: 12, depth: 12, height: 62, clearance: 0 }, 100, 60);
+  assert.deepEqual(blockMove({ x: 30, y: 60 }, { x: 300, y: 60 }, SOLID_DESK, 0, [lamp]), { x: 73, y: 60 });
+});
+
+test("firstCollision names what a turned item would hit", () => {
+  const bed = placed(SOLID_BED, 100, 60);
+  const turnedDesk = footprintBox({ x: 70, y: 60, rotation: 90 }, SOLID_DESK); // 24 wide, 42 deep
+  assert.equal(firstCollision(turnedDesk, SOLID_DESK, [bed]).name, "Bed, twin XL");
+  assert.equal(firstCollision(footprintBox({ x: 30, y: 60, rotation: 0 }, SOLID_DESK), SOLID_DESK, [bed]), null);
 });

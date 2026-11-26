@@ -100,12 +100,14 @@
                 <p class="mb-0 fw-semibold" id="selection-name"></p>
                 <p class="small text-body-secondary mb-1" id="selection-size"></p>
                 <p class="small mb-1 issue-text" id="selection-issue" hidden></p>
+                {# Why the last action didn't happen, e.g. no room to turn (layout.js). #}
+                <p class="small mb-1 text-danger" id="selection-note" role="status" hidden></p>
                 <div class="d-flex gap-2">
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="rotate-button">Rotate 90°</button>
                     <button type="button" class="btn btn-sm btn-outline-danger" id="delete-button">Delete</button>
                 </div>
                 <p class="small text-body-secondary mb-0">
-                    Drag to move. <kbd>R</kbd> turns, arrow keys nudge 1 in
+                    Drag to move: furniture stops against other furniture. <kbd>R</kbd> turns, arrow keys nudge 1 in
                     (<kbd>Shift</kbd> for 6 in), <kbd>Delete</kbd> removes, <kbd>Esc</kbd> deselects.
                 </p>
             </section>

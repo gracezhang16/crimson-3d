@@ -398,6 +398,91 @@ export function findFreeSpot(size, rotation, outlines, others) {
 }
 
 
+// --- Solid furniture (2026-11-26): items can't be dragged into each other -------
+
+/**
+ * Move a footprint along one axis towards `target`, stopping at the first
+ * blocker in the way. Only blockers alongside it on the other axis can be in
+ * the way. Stops on a whole inch, so an item may end up to 1 in short of
+ * touching (positions are whole inches, SPEC.md 4.4).
+ *
+ * @param {{x: number, y: number}} pos - the current centre
+ * @param {"x" | "y"} axis
+ * @param {number} target - the wanted coordinate on that axis
+ * @param {{halfX: number, halfY: number}} half - from footprint()
+ * @param {object[]} blockers - footprint boxes
+ * @returns {{x: number, y: number}}
+ */
+function slideAlong(pos, axis, target, half, blockers) {
+  const along = axis === "x" ? ["minX", "maxX", half.halfX, pos.x] : ["minY", "maxY", half.halfY, pos.y];
+  const across = axis === "x" ? ["minY", "maxY", half.halfY, pos.y] : ["minX", "maxX", half.halfX, pos.x];
+  const [lo, hi, h, current] = along;
+  const [crossLo, crossHi, crossHalf, cross] = across;
+  let value = target;
+  for (const box of blockers) {
+    const side = Math.min(cross + crossHalf, box[crossHi]) - Math.max(cross - crossHalf, box[crossLo]);
+    if (side <= OVERLAP_TOLERANCE) continue; // beside it, not in the way
+    if (value > current && box[lo] >= current + h - OVERLAP_TOLERANCE) {
+      value = Math.min(value, Math.max(current, Math.floor(box[lo] - h + 1e-9)));
+    } else if (value < current && box[hi] <= current - h + OVERLAP_TOLERANCE) {
+      value = Math.max(value, Math.min(current, Math.ceil(box[hi] + h - 1e-9)));
+    }
+  }
+  return axis === "x" ? { x: value, y: pos.y } : { x: pos.x, y: value };
+}
+
+/**
+ * Where a move from `from` towards `to` really ends when other furniture is
+ * solid: the item stops against anything in its way and slides along it,
+ * like a box pushed against a wall.
+ *
+ * Not everything is solid: rules 3 and 4 still hold (a rug never blocks, a
+ * storage bin fits under a bed, see mayOverlap()). Anything the item already
+ * overlaps doesn't block either, so an item that starts out overlapping
+ * (an old saved layout, or no free spot when it was added) can always be
+ * dragged free.
+ *
+ * Each axis is moved in turn. Both orders (east-west first, or north-south
+ * first) are tried and the one ending nearer `to` wins, so dragging
+ * diagonally into a corner between two items still gets as close as it can.
+ *
+ * @param {{x: number, y: number}} from - the item's current centre
+ * @param {{x: number, y: number}} to - where it was dragged (already snapped)
+ * @param {{width: number, depth: number, height: number, clearance: number}} item
+ * @param {number} rotation
+ * @param {{box: object, item: {height: number, clearance: number}}[]} others - every other item
+ * @returns {{x: number, y: number}}
+ */
+export function blockMove(from, to, item, rotation, others) {
+  const half = footprint(item, rotation);
+  const start = { minX: from.x - half.halfX, minY: from.y - half.halfY, maxX: from.x + half.halfX, maxY: from.y + half.halfY };
+  const blockers = others
+    .filter((other) => !mayOverlap(item, other.item) && !overlaps(start, other.box))
+    .map((other) => other.box);
+  if (!blockers.length) {
+    return { x: to.x, y: to.y };
+  }
+  const xFirst = slideAlong(slideAlong(from, "x", to.x, half, blockers), "y", to.y, half, blockers);
+  const yFirst = slideAlong(slideAlong(from, "y", to.y, half, blockers), "x", to.x, half, blockers);
+  const distance = (p) => Math.hypot(p.x - to.x, p.y - to.y);
+  return distance(yFirst) < distance(xFirst) ? yFirst : xFirst;
+}
+
+/**
+ * The first item that a footprint would overlap, ignoring things it may
+ * share space with (rules 3 and 4). Used to refuse a turn with no room.
+ *
+ * @param {object} box - the footprint to test
+ * @param {{height: number, clearance: number}} item
+ * @param {{box: object, item: object}[]} others
+ * @returns {object | null} the other item, or null if the box is clear
+ */
+export function firstCollision(box, item, others) {
+  const hit = others.find((other) => !mayOverlap(item, other.item) && overlaps(box, other.box));
+  return hit ? hit.item : null;
+}
+
+
 // --- P7: issues (rules 3, 4, 6, 8) ---------------------------------------------
 
 const FLAT_HEIGHT = 1; // inches; items this low (rugs) never collide (rule 3)

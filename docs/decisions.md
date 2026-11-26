@@ -438,3 +438,14 @@ Technical choices:
 ## 2026-11-26 (Shorter passwords)
 
 - **Passwords now need at least 6 characters (was 8)**, Grace's call, so they're easier to type during demos. It's still the only rule, checked on the server (`helpers.MIN_PASSWORD_LENGTH`, shared by Register and `create_admin.py`). The form's `minlength` matches but is only a convenience. Alternatives offered: 4 characters, or no minimum.
+
+## 2026-11-26 (Solid furniture)
+
+Product choice from Grace: furniture can't be dragged into other furniture any more (before, overlapping pieces passed through each other and were tinted orange).
+
+- **Stop and slide, not snap back**: a moved item stops at the first item in its way and keeps moving along it on the other axis (`rules.blockMove`), like pushing a box along a wall. Both axis orders are tried, and the one ending nearer the pointer wins, so a diagonal drag into a corner gets as close as it can. Each pointer move starts from where the item is, so it can't jump through a thin item however fast the pointer goes.
+- **Rules 3 and 4 still apply**: rugs never block, and a low item (a storage bin) still slides under a bed with enough clearance. These are the same exceptions `evaluate` uses (`mayOverlap`).
+- **Items already overlapping aren't trapped**: whatever an item overlaps when the move starts doesn't block it. This covers layouts saved before this change, and items added when no free spot was left. So "Overlaps the …" can still appear, and stays in `evaluate`.
+- **A turn that would hit furniture is refused**, with "No room to turn it here: it would hit the futon." in the panel. Alternative: turn and then push it to the nearest free spot, which would move it somewhere the student didn't choose.
+- **Stopping points are whole inches** (positions are whole inches, SPEC.md 4.4), so an item can stop up to 1 in short of touching when the other item's edge falls on a half inch.
+- **Unchanged**: walls between rooms, doors, closets and radiators still don't block. They're flagged as before ("Crosses a wall", "Blocks the door"). The server doesn't check overlaps either; this is planner behaviour, so the contract (SPEC.md section 4) is unchanged.
